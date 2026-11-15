@@ -38,7 +38,8 @@ retrieval:                                              # V1
     rewrite: true                                       # each company's sub-question names only that company
     fan_out: true                                       # "which company…" with no company named: one sub-question per company
   k: 8                                                  # chunks returned, and given to the model
-  device: null                                          # null = GPU if it has 6 GB free, else cpu; or cpu / cuda
+  device: null                                          # null = GPU if it has gpu_free_mb free, else cpu; or cpu / cuda
+  gpu_free_mb: 6144                                     # null: free GPU memory (MiB) the embedder and reranker need
 
 generation:                                             # V2
   model: openai:Qwen/Qwen3.6-27B-FP8                    # scripts/serve_vllm.sh qwen3.6-27b-fp8 · or anthropic:<id>

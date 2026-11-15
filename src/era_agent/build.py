@@ -31,7 +31,7 @@ from pathlib import Path
 
 from era_agent.chunking import chunk, is_current
 from era_agent.preprocess import preprocess
-from era_agent.retrieval.embeddings import get_embedder
+from era_agent.retrieval.embeddings import GPU_FREE_MB, get_embedder
 from era_agent.retrieval.index import add_pages, embed_corpus, load
 from era_agent.store import Store
 
@@ -130,7 +130,10 @@ def embed_db(method: str, out: Path, retrieval: dict) -> None:
     """Vectors for <out>/<method>.db with the config's `retrieval:` embedder and device."""
     store = Store(out / f"{method}.db")
     t = time.time()
-    n = embed_corpus(store, get_embedder(retrieval["embedder"], retrieval["device"]))
+    embedder = get_embedder(
+        retrieval["embedder"], retrieval["device"], retrieval.get("gpu_free_mb", GPU_FREE_MB)
+    )
+    n = embed_corpus(store, embedder)
     print(f"{method}: embedded {n} in {time.time() - t:.0f} s")
 
 

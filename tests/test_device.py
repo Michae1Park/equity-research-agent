@@ -31,3 +31,9 @@ def test_no_gpu_tool_means_cpu(monkeypatch):
     assert embeddings.pick_device(None) == "cpu"
     smi(monkeypatch, error=subprocess.TimeoutExpired("nvidia-smi", 10))
     assert embeddings.pick_device(None) == "cpu"
+
+
+def test_threshold_from_config(monkeypatch):
+    smi(monkeypatch, "8000\n")
+    assert embeddings.pick_device(None, 6144) == "cuda"
+    assert embeddings.pick_device(None, 10000) == "cpu"

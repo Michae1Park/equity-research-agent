@@ -15,7 +15,7 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
-GPU_FREE_MIB = 6144  # device None: the GPU only with this much free (embedder + reranker: 3–6 GB)
+GPU_FREE_MB = 6144  # default for retrieval.gpu_free_mb (embedder + reranker: 3–6 GB)
 
 # bge models retrieve better when queries (not documents) carry this instruction.
 BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
@@ -137,41 +137,47 @@ class HostedReranker:
         return scores
 
 
-def pick_device(device: str | None) -> str | None:
-    """`device` as given; None → "cuda" when the GPU has GPU_FREE_MIB free, else "cpu". Read
-    with nvidia-smi, so choosing doesn't itself take GPU memory (a CUDA context)."""
+def pick_device(device: str | None, gpu_free_mb: int = GPU_FREE_MB) -> str | None:
+    """`device` as given; None → "cuda" when the GPU has `gpu_free_mb` MiB free, else "cpu".
+    Read with nvidia-smi, so choosing doesn't itself take GPU memory (a CUDA context)."""
     if device:
         return device
     try:
-        out = subprocess.run(["nvidia-smi", "--query-gpu=memory.free",
-                              "--format=csv,noheader,nounits"],
-                             capture_output=True, text=True, timeout=10, check=True).stdout
+        out = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        ).stdout
         free = max(int(line) for line in out.split())
     except (OSError, subprocess.SubprocessError, ValueError):
         return "cpu"
-    chosen = "cuda" if free >= GPU_FREE_MIB else "cpu"
+    chosen = "cuda" if free >= gpu_free_mb else "cpu"
     log.info("retrieval device: %s (%d MiB free on the GPU)", chosen, free)
     return chosen
 
 
 @cache
-def get_embedder(spec: str, device: str | None = None) -> Embedder:
+def get_embedder(spec: str, device: str | None = None, gpu_free_mb: int = GPU_FREE_MB) -> Embedder:
     """`device` (e.g. "cpu"); None picks the GPU only when it has room (pick_device)."""
     provider, _, model = spec.partition(":")
     if provider == "local":
-        return LocalEmbedder(model, pick_device(device))
+        return LocalEmbedder(model, pick_device(device, gpu_free_mb))
     if provider == "voyage":
         return VoyageEmbedder(model)
     raise ValueError(f"Unknown embedder {spec!r}")
 
 
 @cache
-def get_reranker(spec: str, device: str | None = None) -> Reranker | None:
+def get_reranker(
+    spec: str, device: str | None = None, gpu_free_mb: int = GPU_FREE_MB
+) -> Reranker | None:
     provider, _, model = spec.partition(":")
     if provider in ("", "none"):
         return None
     if provider == "local":
-        return LocalReranker(model, pick_device(device))
+        return LocalReranker(model, pick_device(device, gpu_free_mb))
     if provider in HostedReranker.URLS:
         return HostedReranker(provider, model)
     raise ValueError(f"Unknown reranker {spec!r}")

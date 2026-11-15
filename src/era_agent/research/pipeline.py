@@ -502,7 +502,7 @@ def main() -> None:
 
         retrieval = yaml.safe_load((ROOT / "experiments/v1/config.yaml").read_text())["retrieval"]
         today = Store(args.db, AsOf.today())
-        search = SubQuestionRetriever.from_settings(today, retrieval | {"device": "cpu"})
+        search = SubQuestionRetriever.from_settings(today, retrieval)
     for ticker in args.tickers:
         print(json.dumps(run(args.db, ticker, args.as_of, settings, not args.no_llm, args.resume,
                              search), indent=1))

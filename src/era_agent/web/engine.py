@@ -309,7 +309,7 @@ class Jobs:
                     retrieval = yaml.safe_load(
                         Path("experiments/v1/config.yaml").read_text())["retrieval"]
                     search = SubQuestionRetriever.from_settings(
-                        Store(db_path(), AsOf.today()), retrieval | {"device": "cpu"})
+                        Store(db_path(), AsOf.today()), retrieval)
                 with telemetry.run("report", {"ticker": job["ticker"], "as_of": job["as_of"]},
                                    llm=job["llm"], resume=resume, job_id=job["id"]) as run:
                     result = pipeline.run(db_path(), job["ticker"], job["as_of"], knobs(),
