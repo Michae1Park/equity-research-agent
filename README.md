@@ -96,7 +96,7 @@ The agent:
 | **Agent** | A tool-calling loop (search, KPIs, facts, calculator, model and valuation tools) that writes a JSON answer with cited claims |
 | **Investigate planner** | Splits a multi-part question into Ask and Research sub-runs, can add a follow-up, and combines the sub-answers into one answer that is claim-checked again |
 | **Report pipeline** | Eleven fixed steps (S1–S11), with the LLM only for events, forecast proposals, debates and the write-up. Exports a note, a workbook whose formulas recalculate to Python's values, and a saved model version |
-| **Web app** | FastAPI with server-sent events and a React UI: chat with a live trace and source drawer, plus report generation and review |
+| **Web app** | FastAPI with server-sent events and a React UI: chat with follow-up questions, a live trace and source drawer, plus report generation and review |
 
 **Rules:** every number comes from a cited source, never from the model's memory; unverified claims are shown, not hidden; ratings and price targets are drafts until a human approves them.
 

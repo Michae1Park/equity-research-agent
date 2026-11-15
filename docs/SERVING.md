@@ -24,7 +24,7 @@ Set `generation.model` (or pass `--model`). How the model layer is built: [V3 ar
 
 | Preset | Model | Weights | Context | Notes |
 |---|---|---|---|---|
-| `qwen3.6-27b-fp8` | Qwen/Qwen3.6-27B-FP8 | 28.5 GB FP8 | 32k | **The default.** CUDA graphs (~17 tok/s vs ~11.5 eager), at most 4 sequences, 80% of memory, no vision, bf16 KV. Keep V2's `run.workers` ≤ 4 |
+| `qwen3.6-27b-fp8` | Qwen/Qwen3.6-27B-FP8 | 28.5 GB FP8 | 32k (Docker: 200k) | **The default.** CUDA graphs (~17 tok/s vs ~11.5 eager), at most 4 sequences, 80% of memory, no vision, bf16 KV. Keep V2's `run.workers` ≤ 4 |
 | `gpt-oss-20b` | openai/gpt-oss-20b | ~13 GB MXFP4 | 32k | **The judge** (V2, V4; another model family, so no model grades itself), port 8002, `GPU_UTIL=0.45`. Doesn't fit beside the 27B: judge a run afterwards (`experiments/v2/judge.py`, `--config` for V4) |
 | `qwen3.5-9b` | Qwen/Qwen3.5-9B | 18 GB BF16 | 64k | A smaller model to compare: `--model openai:Qwen/Qwen3.5-9B` |
 | `gemma-4-31b-fp8` | RedHatAI/gemma-4-31B-it-FP8-block | 30.4 GiB FP8 | 32k | Another model to compare (`GPU_UTIL` 0.86) |
@@ -48,10 +48,13 @@ Set `generation.model` (or pass `--model`). How the model layer is built: [V3 ar
 
 ## Docker
 
-The API and the built UI in one image, on `:8000`. vLLM stays on the host (start it first).
+Two services: `vllm` (the 27B, `vllm/vllm-openai:v0.33.0`) and `era` (the API and the built UI, on `:8000`). `era` starts once vLLM is healthy. Stop a host vLLM first: both use port 8001 and the GPU. `scripts/serve_vllm.sh` is for running era on the host.
 
 ```bash
-docker compose up --build -d     # http://localhost:8000
+docker compose up --build -d     # vLLM on :8001, then http://localhost:8000
 ```
 
-Host networking (so `localhost:8001` in `config.yaml` still reaches vLLM), `.env` for credentials, `data/`, `output/` and `config.yaml` mounted from the repo, GPU via the NVIDIA container toolkit.
+- **vLLM:** the `qwen3.6-27b-fp8` settings, but a **200k** context at **97%** of the GPU (a 232k-token KV cache: one full-length request). This leaves no room for the embedder and reranker, so the web app runs them on CPU. The weights come from the host's `~/.cache/huggingface`.
+- **era:** host networking (so `localhost:8001` in `config.yaml` reaches vLLM), `.env` for credentials, `data/`, `output/` and `config.yaml` mounted from the repo, GPU via the NVIDIA container toolkit.
+- **Both:** pinned to the E-cores (`cpuset: 16-31`); Python segfaults on this machine's P-cores.
+- **The judge:** `docker compose stop vllm`, serve `gpt-oss-20b` on 8002 (the same image, or the preset), judge, then `docker compose start vllm`.

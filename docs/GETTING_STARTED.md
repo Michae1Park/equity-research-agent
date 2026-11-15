@@ -168,6 +168,7 @@ Things to try: change `chunking.target` and rerun V0's scoring; set `slot_search
 | Python segfaults at random | Run with `taskset -c 16-31` |
 | GPU out of memory | [SERVING.md](SERVING.md#gotchas) |
 | vLLM out of memory or a missing `nvcc` | Use the `qwen3.6-27b-fp8` preset: bf16 KV cache, no vision, 32k context ([SERVING.md](SERVING.md)) |
+| Docker vLLM fails at startup with too little KV cache memory | Another process holds GPU memory (a host vLLM, a lingering container): stop it; compose restarts vLLM |
 | "Report mode needs the V4 corpus" | `export ERA_COMPANIES=companies.yaml` |
 | A credential error naming a key | `era setup` |
 | Export raises `RuntimeError` | Install LibreOffice and Chrome or Chromium; no version is saved until export works |

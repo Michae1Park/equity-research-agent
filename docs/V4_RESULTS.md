@@ -79,3 +79,19 @@ UBER, earnings update after Q2 2026, as of 2026-08-06: [note (Markdown)](example
 ## Roll-out: all eight end to end (2026-11-09)
 
 Each company's report ran on the Qwen 27B the day after its Q2 2026 release (`era research report <T> --as-of <D>`: UBER 2026-08-06, BKNG 2026-08-05, DASH and EXPE 2026-08-06, ABNB, CART, LYFT and TRIP 2026-08-07), 6–10 minutes each, then reran with `--resume` after the checker fixes below. All eight: ten sections, full workbook parity (350–750 formula cells), no `error` exceptions, saved as drafts. Fixes found on the way, each to the pipeline's checks, none to the notes' text: text written by the sub-agents (debate questions, event summaries) is now traced like prose, and a sentence with an untraced number is replaced by a code-written one (a warning); section 9's exception counts are set once the log is final and checked verbatim; chunk ids are not read as figures. The example files above are the redacted public copy of this UBER run (`experiments/v4/redact_example.py`; market values read "local only").
+
+## Multi-turn follow-ups (2026-11-15)
+
+Two ways for a web-chat follow-up to use the earlier turns, on 12 three-turn conversations (24 follow-ups: ellipsis, pronouns, company switches, a standalone topic switch, opinion follow-ups) in Research mode. Each follow-up pair was judged blind by gpt-oss-20b in both orders; a win needs both (`experiments/multiturn/compare.py`).
+
+| | append | rewrite |
+|---|---|---|
+| Wins | 11 | 10 (3 ties) |
+| Mean seconds per turn | 105 | 136 |
+| Mean / max peak input tokens | 13k / 42k | 17k / 48k |
+
+- **`append` won reasoning and opinion follow-ups** ("other reasons besides the model", "the bear case", "which is most exposed"). It builds on its own earlier analysis.
+- **`rewrite` won data lookups** ("faster than B2C?", guidance, take rate trend). It searches again from a precise standalone question.
+- **Both kept the context in every follow-up.** No rewrite lost the company or topic, and the standalone turn was left as typed.
+- **The default is `auto`:** `append` until the earlier turns pass 100k tokens, then `rewrite` (design doc §8.5).
+- **Limits:** 24 follow-ups; the judge does not check facts.
