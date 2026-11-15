@@ -500,7 +500,7 @@ query → decompose: one sub-question per company (and filing slot)
 | No company, or an unknown one | Error listing the corpus |
 | Bad period key | Error |
 | No filing for a slot at that as-of | Fewer chunks, not an error |
-| GPU held by vLLM | Embedder and reranker run on CPU |
+| GPU held by vLLM | Embedder and reranker run on CPU (`retrieval.device: null` picks the GPU only with 6 GB free) |
 | Size | k chunks per call (default 8), each a bounded parent |
 
 ---
@@ -1010,7 +1010,7 @@ Per-block cases: §3.3, §4.3, §5.4, §6.3, §7.3, §8.3, §9.3, §10.3, §11.3
 | Limit | Value |
 |---|---|
 | LLM context | 200k tokens (Qwen3.6-27B-FP8 on vLLM; 97% of the GPU, a 232k-token KV cache: one full-length request) |
-| GPU | One. vLLM holds it; in the web app the embedder and reranker run on CPU; the judge runs as a second pass with vLLM stopped |
+| GPU | One. vLLM holds 97% (local and Docker alike); question-time search runs on CPU; corpus embedding and the judge run with vLLM stopped |
 | Runs | One chat or report run at a time (web app) |
 | Licences | Market values never leave `data/` |
 | Report time | Budgeted per run (Appendix A) |
