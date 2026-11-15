@@ -500,7 +500,7 @@ query → decompose: one sub-question per company (and filing slot)
 | No company, or an unknown one | Error listing the corpus |
 | Bad period key | Error |
 | No filing for a slot at that as-of | Fewer chunks, not an error |
-| GPU held by vLLM | Embedder and reranker run on CPU (`retrieval.device: null` picks the GPU only with 6 GB free) |
+| GPU held by vLLM | Embedder and reranker run on CPU (`retrieval.device: null` picks the GPU only with `retrieval.gpu_free_mb` free) |
 | Size | k chunks per call (default 8), each a bounded parent |
 
 ---
@@ -1033,7 +1033,7 @@ Per-block cases: §3.3, §4.3, §5.4, §6.3, §7.3, §8.3, §9.3, §10.3, §11.3
 - **Chat:** `auto` follow-ups; append budget 100k tokens; all answered turns kept.
 - **Investigate:** ≤ 5 sub-questions, ≤ 2 follow-ups in one replan; each sub-run on the Ask or Research budget; combine input 16k tokens; time budget 30 minutes.
 - **Sub-agents:** S2 events 8 calls, S4 proposer 10, S9 debates 8, each 16k context; S10 slot 1.5k tokens out. Extraction input ≤ 12k tokens per release. Report time budget 30 minutes.
-- **Retrieval:** 40 candidates per search, RRF k = 60, 8 chunks.
+- **Retrieval:** 40 candidates per search, RRF k = 60, 8 chunks; device `null` (the GPU when 6,144 MiB are free, else the CPU).
 - **Forecast:** horizon Q4 of the as-of year + 1 (`"+1"`; a fixed key such as `2027Q4` still works); valuation target year the as-of year + 1; fade 0.9 (bounds 0.75–1.0); guidance midpoint; seasonal shares over 3 years; ratio bands 50 bps (take rate) and 200 bps (margins); tax 10–30%; outside inputs on (weight 0.5, at least 6 quarters).
 - **Scenarios:** weights 25/50/25; shocks ±1σ.
 - **Valuation:** 60/40 multiple/DCF; scenario multiples ±15%; terminal growth 3% (grid 2.5–3.5%); 10 DCF years; β from monthly returns since 2023; debt-weight threshold 10%; Buy +15%, Sell −10%.

@@ -42,7 +42,7 @@ Set `generation.model` (or pass `--model`). How the model layer is built: [V3 ar
 
 ## Gotchas
 
-- **GPU memory.** At 97% the 27B leaves no room for the embedder and reranker. `retrieval.device: null` puts them on the GPU only when it has 6 GB free (read with `nvidia-smi`), else on CPU. So question-time search runs on CPU while vLLM is up. To embed a whole corpus (`--stage embed`) on the GPU, stop vLLM first; `device: null` then picks the GPU.
+- **GPU memory.** At 97% the 27B leaves no room for the embedder and reranker. `retrieval.device: null` puts them on the GPU only when it has `retrieval.gpu_free_mb` free (6144 MiB, read with `nvidia-smi`), else on CPU; every entry point (web app, Report, CLI, backtest, build) follows it. So question-time search runs on CPU while vLLM is up. To embed a whole corpus (`--stage embed`) on the GPU, stop vLLM first; `device: null` then picks the GPU.
 - **Thinking mode.** Qwen models think by default; `generation.thinking: false` keeps an answer to seconds instead of minutes.
 - **One model per port.** The 27B and the judge don't fit together: generate first, then stop the 27B and serve the judge.
 
