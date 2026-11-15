@@ -460,6 +460,7 @@ variance_review(company, period: period)                   # period reported at 
 | S9 debate, per driver | `debates.md` | `ask` | `{answer, debate: {question, bull, bear, hypothesis, trigger, gap, evidence: [id]}}` |
 | S10 prose slot | `section.md` | – | `{text}`, facts marked `{F-n}` |
 | Judge (evaluation) | `judge.md` | – | scores per criterion |
+| Chat follow-up rewrite | `rewrite.md` | – | One line of plain text, not JSON: the standalone question (design §8.5) |
 
 **Answer** (Ask and Research):
 
@@ -779,6 +780,17 @@ Saved as a version (`UBER:v1`, `UBER:v2`, …) with its parent. `research_report
 | Model (prior) | the parent's values as saved, or "initial draft (no prior run)" |
 | Checks | check, status, tested, failures, skipped |
 | Log | id, kind (evidence or exception), label or severity, value or item, source |
+
+**Web chat** `output/web/chats/<id>.json`:
+
+```text
+{id, title, created, updated,
+ messages: [{role: "user", mode, as_of, text, time}
+          | {role: "assistant", mode, answer, stop, seconds, time, trace: [event],
+             rewritten: str | null,                     # the standalone question (rewrite)
+             history: {strategy, used, turns, tokens},  # auto | append | rewrite | none
+             investigation?, error?}]}
+```
 
 **Review:** `era research approve TICKER:vN --by INITIALS` sets `status` to `"reviewed by <INITIALS> on <date>"`; anything other than `draft` reads as reviewed.
 

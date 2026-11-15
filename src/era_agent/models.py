@@ -204,6 +204,17 @@ class OpenAICompatibleModel:
             else {}
         )
 
+    def context_window(self) -> int | None:
+        """The server's context length for this model (vLLM's max_model_len), cached; None if
+        the server doesn't say."""
+        if not hasattr(self, "_window"):
+            try:
+                served = {m.id: m for m in self._client.models.list().data}
+                self._window = getattr(served.get(self.model), "max_model_len", None)
+            except Exception:  # noqa: BLE001  unknown: the caller keeps its own cap
+                self._window = None
+        return self._window
+
     @logged_complete
     def complete(
         self, messages, tools=None, system=None, max_tokens=8000, tool_choice=None

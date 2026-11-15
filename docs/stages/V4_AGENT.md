@@ -14,9 +14,11 @@ question ─► model ──tool calls──► tools ─► model ─► … �
 | --- | --- |
 | First turn | Must call a tool |
 | Same call repeated | Returns an error; still counts toward the budget |
-| Over `max_calls` or `max_context` tokens | One last turn with tools off |
+| Over `max_calls` or `max_context` tokens | One last turn with tools off (`max_context` is capped to fit the server's window) |
 | Reply isn't valid JSON | One "only the JSON" retry |
 | Answer returned | The claim check verifies each claim ([V4_VERIFICATION.md](V4_VERIFICATION.md)) |
+
+**Follow-ups (web chat).** `agent/history.py` gives a follow-up the chat's earlier answered turns. By default (`chat.history: auto`) they are appended as user/assistant messages before the question while they fit `chat.append_budget` (100k tokens); past that, one call (`prompts/rewrite.md`) rewrites the follow-up into a standalone question and the run gets no history. Only answers are carried, never tool results. Rules: [design doc §8.5](../V4_TECHNICAL_DESIGN_DOC.md#85-chat-follow-ups).
 
 **Context stays small.** State lives in files, not chat. Each call sees only what it needs (a debate sees one driver; a section writer sees only its facts) and fetches detail by id.
 

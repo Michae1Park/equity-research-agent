@@ -18,9 +18,9 @@ from era_agent.store import Store
 
 
 def agent_factory(db: Path, retrieval: dict, generation: dict, agent_config: dict):
-    """A function (as_of, tool_set, session) -> a fresh agent. Search runs on the CPU (vLLM
-    holds the GPU)."""
-    base = SubQuestionRetriever.from_settings(Store(db), retrieval | {"device": "cpu"})
+    """A function (as_of, tool_set, session) -> a fresh agent. Search runs where
+    retrieval.device puts it (null: the CPU while vLLM holds the GPU)."""
+    base = SubQuestionRetriever.from_settings(Store(db), retrieval)
     model = get_model(generation["model"], base_url=generation["base_url"], thinking=False)
     lock, search_lock = threading.Lock(), threading.Lock()
     books: dict[str, Book] = {}

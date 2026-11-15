@@ -181,7 +181,8 @@ Things to try: change `chunking.target` and rerun V0's scoring; set `slot_search
 | Symptom | Fix |
 |---|---|
 | GPU out of memory | [SERVING.md](SERVING.md#gotchas) |
-| vLLM out of memory or a missing `nvcc` | Use the `qwen3.6-27b-fp8` preset: bf16 KV cache, no vision, 32k context ([SERVING.md](SERVING.md)) |
+| vLLM out of memory or a missing `nvcc` | Use the `qwen3.6-27b-fp8` preset: bf16 KV cache, no vision ([SERVING.md](SERVING.md)). On a smaller GPU, lower `MAX_LEN_27B`; the agent's context cap follows the server |
+| vLLM fails at startup with too little KV cache memory | Another process holds GPU memory (a second vLLM, a lingering container, an embedder on the GPU): stop it and start vLLM again (compose restarts it) |
 | "Report mode needs the V4 corpus" | `export ERA_COMPANIES=companies.yaml` |
 | A credential error naming a key | `era setup` |
 | Export raises `RuntimeError` | Install LibreOffice and Chrome or Chromium; no version is saved until export works |

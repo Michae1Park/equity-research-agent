@@ -228,7 +228,7 @@ def _research(args: argparse.Namespace, settings: dict) -> int:
 
         today = Store(db, AsOf.today())
         retrieval = yaml.safe_load(Path("experiments/v1/config.yaml").read_text())["retrieval"]
-        search = SubQuestionRetriever.from_settings(today, retrieval | {"device": "cpu"})
+        search = SubQuestionRetriever.from_settings(today, retrieval)
     for ticker in args.tickers:
         print(json.dumps(run(db, ticker.upper(), args.as_of, knobs(), not args.no_llm,
                              args.resume, search), indent=1))

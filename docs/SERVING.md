@@ -24,7 +24,7 @@ Set `generation.model` (or pass `--model`). How the model layer is built: [V3 ar
 
 | Preset | Model | Weights | Context | Notes |
 |---|---|---|---|---|
-| `qwen3.6-27b-fp8` | Qwen/Qwen3.6-27B-FP8 | 28.5 GB FP8 | 32k | **The default.** CUDA graphs (~17 tok/s vs ~11.5 eager), at most 4 sequences, 80% of memory, no vision, bf16 KV. Keep V2's `run.workers` ≤ 4 |
+| `qwen3.6-27b-fp8` | Qwen/Qwen3.6-27B-FP8 | 28.5 GB FP8 | 200k | **The default** (the same settings as Docker). CUDA graphs (~17 tok/s vs ~11.5 eager), at most 4 sequences, 97% of memory (a 232k-token KV cache: one 200k request), no vision, bf16 KV. Keep V2's `run.workers` ≤ 4 |
 | `gpt-oss-20b` | openai/gpt-oss-20b | ~13 GB MXFP4 | 32k | **The judge** (V2, V4; another model family, so no model grades itself), port 8002, `GPU_UTIL=0.45`. Doesn't fit beside the 27B: judge a run afterwards (`experiments/v2/judge.py`, `--config` for V4) |
 | `qwen3.5-9b` | Qwen/Qwen3.5-9B | 18 GB BF16 | 64k | A smaller model to compare: `--model openai:Qwen/Qwen3.5-9B` |
 | `gemma-4-31b-fp8` | RedHatAI/gemma-4-31B-it-FP8-block | 30.4 GiB FP8 | 32k | Another model to compare (`GPU_UTIL` 0.86) |
@@ -32,8 +32,8 @@ Set `generation.model` (or pass `--model`). How the model layer is built: [V3 ar
 
 | Variable | Default | What it does |
 |---|---|---|
-| `GPU_UTIL` | 0.72 (27B: 0.80) | GPU memory share; leaves room for the embedder and reranker |
-| `MAX_LEN` / `MAX_LEN_27B` / `MAX_LEN_31B` / `MAX_LEN_JUDGE` | 65536 / 32768 / 32768 / 32768 | Context length |
+| `GPU_UTIL` / `GPU_UTIL_27B` | 0.72 / 0.97 | GPU memory share; below 0.97 leaves room for the embedder and reranker on the GPU |
+| `MAX_LEN` / `MAX_LEN_27B` / `MAX_LEN_31B` / `MAX_LEN_JUDGE` | 65536 / 200000 / 32768 / 32768 | Context length |
 | `MAX_SEQS_27B` | 4 | Sequences at once on the 27B; the vLLM default (256) fills the card at startup |
 | `PORT`, `VLLM_BIN` | 8001, `vllm` (else the conda env above) | |
 | `ERA_CPUSET` | unset | CPU cores to pin the server and containers to (`taskset`, compose `cpuset`), e.g. `16-31` |
@@ -43,7 +43,7 @@ Set `generation.model` (or pass `--model`). How the model layer is built: [V3 ar
 
 ## Gotchas
 
-- **GPU memory.** The 27B leaves ~8 GB for the embedder and reranker that search, the agent and the V1/V2 experiments load. Embedding a whole corpus (`--stage embed`) wants vLLM stopped, or `retrieval.device: cpu`.
+- **GPU memory.** At 97% the 27B leaves no room for the embedder and reranker. `retrieval.device: null` puts them on the GPU only when it has `retrieval.gpu_free_mb` free (6144 MiB, read with `nvidia-smi`), else on CPU; every entry point (web app, Report, CLI, backtest, build) follows it. So question-time search runs on CPU while vLLM is up. To embed a whole corpus (`--stage embed`) on the GPU, stop vLLM first; `device: null` then picks the GPU.
 - **Thinking mode.** Qwen models think by default; `generation.thinking: false` keeps an answer to seconds instead of minutes.
 - **One model per port.** The 27B and the judge don't fit together: generate first, then stop the 27B and serve the judge.
 
@@ -52,7 +52,7 @@ Set `generation.model` (or pass `--model`). How the model layer is built: [V3 ar
 Two services: `vllm` (the `qwen3.6-27b-fp8` preset's settings, image `vllm/vllm-openai:v0.33.0`) and `era` (the API and the built UI), on `:8000`. Stop any `serve_vllm.sh` server first; `era` starts once vLLM is healthy (first start: up to ~10 min).
 
 ```bash
-docker compose up --build -d     # http://localhost:8000
+docker compose up --build -d     # vLLM on :8001, then http://localhost:8000
 ```
 
 Host networking (so `localhost:8001` in `config.yaml` reaches vLLM), `.env` for credentials and `ERA_CPUSET`, `data/`, `output/` and `config.yaml` mounted from the repo, Hugging Face weights reused from `HF_HOME`, GPU via the NVIDIA container toolkit. Without Docker, `scripts/launch.sh` runs the same stack locally ([GETTING_STARTED.md](GETTING_STARTED.md#6-web-ui)).

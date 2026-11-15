@@ -13,7 +13,13 @@ child is swapped for its parent, best child first, each parent once.
 from dataclasses import dataclass, field
 
 from era_agent.retrieval.decompose import QueryDecomposer, SubQuestion
-from era_agent.retrieval.embeddings import Embedder, Reranker, get_embedder, get_reranker
+from era_agent.retrieval.embeddings import (
+    GPU_FREE_MB,
+    Embedder,
+    Reranker,
+    get_embedder,
+    get_reranker,
+)
 from era_agent.retrieval.index import embedding_text
 from era_agent.store import ChildRecord, ChunkRecord, Store
 
@@ -120,7 +126,9 @@ class SubQuestionRetriever:
     def from_settings(cls, store: Store, settings: dict) -> "SubQuestionRetriever":
         """The pipeline as the config's `retrieval:` section sets it. The database's vectors
         must come from the configured embedder."""
-        embedder = get_embedder(settings["embedder"], settings["device"])
+        embedder = get_embedder(
+            settings["embedder"], settings["device"], settings.get("gpu_free_mb", GPU_FREE_MB)
+        )
         if store.embedding_model() != embedder.name:
             raise RuntimeError(
                 f"the database's vectors are {store.embedding_model()!r}, not {embedder.name!r}"
@@ -131,7 +139,11 @@ class SubQuestionRetriever:
             HybridSearch(
                 store,
                 embedder,
-                get_reranker(settings["reranker"], settings["device"]),
+                get_reranker(
+                    settings["reranker"],
+                    settings["device"],
+                    settings.get("gpu_free_mb", GPU_FREE_MB),
+                ),
                 candidates=settings["candidates"],
                 rrf_k=settings["rrf_k"],
             ),

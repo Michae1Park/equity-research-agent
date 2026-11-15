@@ -138,15 +138,31 @@ def _trace_tools(agent, emit, scope: dict):
 
 
 def chat(settings: dict, mode: str, question: str, as_of: str, emit: Emitter,
-         chat_id: str | None = None) -> dict:
-    """One chat message in its mode → {"mode", "answer", "steps" | "investigation"}."""
-    with telemetry.run("chat", question, mode=mode, chat_id=chat_id, as_of=as_of) as run:
-        result = _chat(settings, mode, question, as_of, emit)
+         chat_id: str | None = None, history: list[dict] | None = None,
+         strategy: str = "none", budget: int = 100000) -> dict:
+    """One chat message in its mode → {"mode", "answer", "steps" | "investigation"}.
+    history: the chat's earlier answered turns (agent.history.turns); strategy: how they are
+    used (auto | append | rewrite | none); budget: auto's append limit in tokens."""
+    from era_agent.agent.history import resolve, tokens
+
+    history = history or []
+    used = resolve(strategy, history, budget)
+    history = history if used != "none" else []
+    info = {"strategy": strategy, "used": used, "turns": len(history),
+            "tokens": tokens(history)}
+    with telemetry.run("chat", question, mode=mode, chat_id=chat_id, as_of=as_of,
+                       history=info) as run:
+        if strategy == "auto" and used == "rewrite":
+            emit("status", text=f"earlier turns ({info['tokens']} tokens) are over the "
+                                f"{budget}-token budget")
+        result = _chat(settings, mode, question, as_of, emit, history, used)
+        result["history"] = info
         run.finish(result, result.get("stop") or "ok")
         return result
 
 
-def _chat(settings: dict, mode: str, question: str, as_of: str, emit: Emitter) -> dict:
+def _chat(settings: dict, mode: str, question: str, as_of: str, emit: Emitter,
+          history: list[dict], strategy: str) -> dict:
     if not _gpu.acquire(blocking=False):
         emit("status", text="waiting for the running job to finish")
         while not _gpu.acquire(timeout=1):
@@ -156,15 +172,26 @@ def _chat(settings: dict, mode: str, question: str, as_of: str, emit: Emitter) -
         emit("status", text="loading models" if _factory is None else "starting")
         agent = factory(settings)
         scope: dict = {}
+        rewritten = None
+        if history and strategy == "rewrite":
+            from era_agent.agent.history import rewrite
+
+            emit("status", text="rewriting the follow-up")
+            model = agent(as_of, mode if mode != "investigate" else "research").model
+            rewritten = question = rewrite(model, history, question)
+            emit("rewrite", question=question)
+            history = []
         if mode in ("ask", "research"):
             run_agent = agent(as_of, mode)
             _trace_tools(run_agent, emit, scope)
             restore = _trace_model(run_agent.model, emit, scope)
             try:
-                run = run_agent.run(question)
+                from era_agent.agent.history import as_messages
+
+                run = run_agent.run(question, as_messages(history))
             finally:
                 restore()
-            return {"mode": mode, "answer": run.answer, "stop": run.stop,
+            return {"mode": mode, "answer": run.answer, "stop": run.stop, "rewritten": rewritten,
                     "seconds": run.seconds, "steps": [asdict(s) for s in run.steps]}
         if mode == "investigate":
             from era_agent.agent.plan import Investigator
@@ -193,11 +220,14 @@ def _chat(settings: dict, mode: str, question: str, as_of: str, emit: Emitter) -
                 a.run = run_sub
             restore = _trace_model(research.model, emit, scope)
             try:
-                inv = Investigator(research.model, agents).run(question)
+                from era_agent.agent.history import as_context
+
+                inv = Investigator(research.model, agents).run(
+                    as_context(history, question) if history else question)
             finally:
                 restore()
             data = json.loads(json.dumps(inv.to_dict(), default=str))
-            return {"mode": mode, "answer": inv.answer, "stop": inv.stop,
+            return {"mode": mode, "answer": inv.answer, "stop": inv.stop, "rewritten": rewritten,
                     "seconds": inv.seconds, "investigation": data}
         raise ValueError(f"unknown mode {mode!r}")
     finally:
@@ -279,7 +309,7 @@ class Jobs:
                     retrieval = yaml.safe_load(
                         Path("experiments/v1/config.yaml").read_text())["retrieval"]
                     search = SubQuestionRetriever.from_settings(
-                        Store(db_path(), AsOf.today()), retrieval | {"device": "cpu"})
+                        Store(db_path(), AsOf.today()), retrieval)
                 with telemetry.run("report", {"ticker": job["ticker"], "as_of": job["as_of"]},
                                    llm=job["llm"], resume=resume, job_id=job["id"]) as run:
                     result = pipeline.run(db_path(), job["ticker"], job["as_of"], knobs(),

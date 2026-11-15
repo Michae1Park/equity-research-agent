@@ -298,7 +298,7 @@ def main() -> None:
 
         retrieval = yaml.safe_load((ROOT / "experiments/v1/config.yaml").read_text())["retrieval"]
         today = Store(args.db, AsOf.today())
-        search = SubQuestionRetriever.from_settings(today, retrieval | {"device": "cpu"})
+        search = SubQuestionRetriever.from_settings(today, retrieval)
     rows = []
     for ticker in args.tickers:
         found = (long_horizon(args.db, ticker, settings) if args.long

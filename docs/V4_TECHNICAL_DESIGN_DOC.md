@@ -26,6 +26,7 @@ The system serves four entry points, each at an as-of date, over eight companies
 | **Report** | Ticker + as-of | A 10-section draft note, a model-change workbook, an evidence and exception log |
 
 - **Companies:** BKNG, EXPE, ABNB, TRIP (travel) · UBER, LYFT, DASH, CART (mobility and delivery).
+- **Follow-ups:** in the web app's chat, Ask, Research and Investigate take follow-up questions with the earlier turns as context (§8.5).
 - **Reuse:** V4 builds on V0–V3's parsing, chunking, retrieval, agent loop and claim check; V3 stays runnable as a regression check.
 - **Terms:** Appendix D.
 
@@ -499,7 +500,7 @@ query → decompose: one sub-question per company (and filing slot)
 | No company, or an unknown one | Error listing the corpus |
 | Bad period key | Error |
 | No filing for a slot at that as-of | Fewer chunks, not an error |
-| GPU held by vLLM | Embedder and reranker run on CPU |
+| GPU held by vLLM | Embedder and reranker run on CPU (`retrieval.device: null` picks the GPU only with `retrieval.gpu_free_mb` free) |
 | Size | k chunks per call (default 8), each a bounded parent |
 
 ---
@@ -658,12 +659,13 @@ Code: the loop (`agent/loop.py`, LangGraph), the Investigate planner (`agent/pla
 | S9 debate, per driver | `ask` | Calls and context |
 | S10 prose slot | – | Output tokens, 1 repair |
 | Judge (evaluation) | – | Another model family, a second pass |
+| Chat follow-up rewrite | – | 1 call, ≤ 300 tokens out; input ≤ 60,000 characters (§8.5) |
 
 Budget values: Appendix A.
 
 ### 8.2 Rules
 
-**Context per call:** a system prompt (`prompts/<mode>.md`) with the as-of, the tool schemas of the run's set, the question, then tool results as they come. Nothing else is carried between runs. The forced answer fires when calls reach the budget or the last call's input tokens reach the context cap. Sub-agents get a purpose-built view: S2 the ticker and quarter; S4 the driver table; S9 one driver and its value.
+**Context per call:** a system prompt (`prompts/<mode>.md`) with the as-of, the tool schemas of the run's set, a chat's earlier turns when the follow-up appends them (§8.5), the question, then tool results as they come. Nothing else is carried between runs. The forced answer fires when calls reach the budget or the last call's input tokens reach the context cap. Sub-agents get a purpose-built view: S2 the ticker and quarter; S4 the driver table; S9 one driver and its value.
 
 
 ```text
@@ -686,6 +688,7 @@ question → model → tool calls → tools → model → … → JSON answer �
 |---|---|
 | Tool error | Returned to the model (§5.4) |
 | Budget spent or context full | Forced answer turn, tools off |
+| Server window smaller than the context cap | The cap drops to fit it (Appendix A) |
 | Answer still not JSON | Recorded as unparsed; no claims |
 | Sub-agent returns nothing usable | Its Report step degrades (§9.3) |
 | vLLM unreachable | The call raises; a report resumes with `--resume` |
@@ -732,6 +735,28 @@ question → plan (plan.md: question, as-of, coverage table, tool-set summaries;
 | Time | Up to (5 + 2) sub-runs; budget in Appendix A, a warning past it |
 
 ---
+
+### 8.5 Chat follow-ups
+
+A web chat keeps its turns (`output/web/chats/<id>.json`); the CLI (`era chat`, `era investigate`) takes single questions. A follow-up uses the earlier answered turns as context; a turn that failed or was cancelled is skipped. Code: `agent/history.py`, `prompts/rewrite.md`.
+
+| Strategy (`chat.history`) | What the run gets |
+|---|---|
+| **`auto`** (default) | `append` while the earlier turns fit `chat.append_budget` tokens; past it, `rewrite` |
+| `append` | Ask and Research: each earlier turn as a user message (its question) and an assistant message (its answer's prose, table and assumptions), before the question. Investigate: the turns as a "Conversation so far" block in the planner's question |
+| `rewrite` | One call (no tools, ≤ 300 tokens out) rewrites the follow-up into a standalone question from the most recent turns (each answer cut to 2,000 characters, ≤ 60,000 in all); the run gets that question and no history |
+| `none` | The question alone |
+
+- Only answers are carried, never tool results or traces: a long chat grows the context by its answers, not its work.
+- Token estimate: 3 characters per token, an overcount, so `auto` switches early rather than late.
+- A rewritten question is shown with the answer ("Interpreted as: …"), and is what later turns see in place of the follow-up.
+- The strategy, the one used, the turn count and the history's tokens are recorded with the message and in telemetry.
+- Why `auto` appends first: on 24 follow-ups judged blind by gpt-oss-20b in both orders, `append` won 11 and `rewrite` 10 (3 ties). `append` won reasoning follow-ups and `rewrite` won lookups, but `append` was about 25% faster (`experiments/multiturn/compare.py`).
+
+| Case | Handling |
+|---|---|
+| Rewrite call fails or returns nothing | The follow-up runs as typed |
+| History over the budget | `auto` rewrites; the agent's context cap (Appendix A) still forces an answer |
 
 ## 9. Report pipeline
 
@@ -984,8 +1009,9 @@ Per-block cases: §3.3, §4.3, §5.4, §6.3, §7.3, §8.3, §9.3, §10.3, §11.3
 
 | Limit | Value |
 |---|---|
-| LLM context | 32k tokens (Qwen3.6-27B-FP8 on vLLM) |
-| GPU | One, shared by vLLM and the embedder; the judge runs as a second pass |
+| LLM context | 200k tokens (Qwen3.6-27B-FP8 on vLLM; 97% of the GPU, a 232k-token KV cache: one full-length request) |
+| GPU | One. vLLM holds 97% (local and Docker alike); question-time search runs on CPU; corpus embedding and the judge run with vLLM stopped |
+| Runs | One chat or report run at a time (web app) |
 | Licences | Market values never leave `data/` |
 | Report time | Budgeted per run (Appendix A) |
 | Coverage | December fiscal years; filings from 2023-01-01; CART from Q3 2023 |
@@ -1003,10 +1029,11 @@ Per-block cases: §3.3, §4.3, §5.4, §6.3, §7.3, §8.3, §9.3, §10.3, §11.3
 | `research/model/templates/*.yaml` | Model templates | With the code |
 
 **Key defaults:**
-- **Agent:** 20 calls, 20k context; tool results 40 rows, 16,000 characters.
+- **Agent:** 20 calls, 180k context, capped at the server's window less the output budget and a 1/8 margin (200k → 171k; a 32k server → 24.6k); tool results 40 rows, 16,000 characters.
+- **Chat:** `auto` follow-ups; append budget 100k tokens; all answered turns kept.
 - **Investigate:** ≤ 5 sub-questions, ≤ 2 follow-ups in one replan; each sub-run on the Ask or Research budget; combine input 16k tokens; time budget 30 minutes.
 - **Sub-agents:** S2 events 8 calls, S4 proposer 10, S9 debates 8, each 16k context; S10 slot 1.5k tokens out. Extraction input ≤ 12k tokens per release. Report time budget 30 minutes.
-- **Retrieval:** 40 candidates per search, RRF k = 60, 8 chunks.
+- **Retrieval:** 40 candidates per search, RRF k = 60, 8 chunks; device `null` (the GPU when 6,144 MiB are free, else the CPU).
 - **Forecast:** horizon Q4 of the as-of year + 1 (`"+1"`; a fixed key such as `2027Q4` still works); valuation target year the as-of year + 1; fade 0.9 (bounds 0.75–1.0); guidance midpoint; seasonal shares over 3 years; ratio bands 50 bps (take rate) and 200 bps (margins); tax 10–30%; outside inputs on (weight 0.5, at least 6 quarters).
 - **Scenarios:** weights 25/50/25; shocks ±1σ.
 - **Valuation:** 60/40 multiple/DCF; scenario multiples ±15%; terminal growth 3% (grid 2.5–3.5%); 10 DCF years; β from monthly returns since 2023; debt-weight threshold 10%; Buy +15%, Sell −10%.
@@ -1045,9 +1072,9 @@ src/era_agent/
                  model/   dsl.py graph.py history.py checks.py templates/
                  note/    facts.py sections.py write.py trace.py consistency.py
                  export/  workbook.py report.py
-  agent/         tools.py loop.py plan.py sec.py
+  agent/         tools.py loop.py plan.py sec.py history.py
   evaluation/    extraction.py backtest.py note_eval.py render.py (+ V0–V3)
-  prompts/       ask.md research.md plan.md combine.md extract.md propose.md events.md debates.md section.md judge.md
+  prompts/       ask.md research.md plan.md combine.md extract.md propose.md events.md debates.md section.md judge.md rewrite.md
 docs/
   V4_INTERFACES.md   full interface schemas (§2.3)
   stages/V4_*.md     how each block works (companions to §3–§12)

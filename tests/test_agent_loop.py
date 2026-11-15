@@ -122,3 +122,17 @@ def test_the_answer_turn_after_the_budget_says_why(tmp_path):
     run_agent, model = agent(tmp_path, [calls, json.dumps(ANSWER)], max_calls=2)
     run_agent.run("q")
     assert model.seen[-1][0][-1] == {"role": "user", "content": ANSWER_NOW}
+
+
+def test_context_cap_follows_server_window():
+    from types import SimpleNamespace
+
+    from era_agent.agent.loop import context_cap
+
+    def model(window):
+        return SimpleNamespace(context_window=lambda: window)
+
+    assert context_cap(model(32768), 180000, 4000) == 32768 - 4000 - 4096
+    assert context_cap(model(200000), 180000, 4000) == 171000
+    assert context_cap(model(None), 180000, 4000) == 180000
+    assert context_cap(SimpleNamespace(), 20000, 4000) == 20000  # Claude, fakes

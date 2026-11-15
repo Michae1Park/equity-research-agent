@@ -146,6 +146,8 @@ Window: **filings made from 2023-01-01 through the day before the as-of date**.
 
 Ask and Research both answer questions. Ask retrieves what was reported; Research computes something new (an estimate, scenario or valuation) by running the model. Investigate answers a question too broad for one run: it plans sub-questions, runs each as Ask or Research, and combines their verified answers (§2.4).
 
+**Follow-ups.** In the web app's chat, Ask, Research and Investigate answer a follow-up in the context of the earlier turns ("And delivery?", "Now the bear case."): the company, metric, period and earlier conclusions carry over. A question that stands alone is answered as if it were the first. Report mode takes no follow-ups.
+
 When a comparison needs a KPI that some of the companies do not report (§1.5), Ask and Research say which companies lack it, and never fill the gap with an estimate. Where definitions differ between companies, they say so.
 
 ### 2.1 Ask mode: example question per category

@@ -38,7 +38,8 @@ retrieval:                                              # V1
     rewrite: true                                       # each company's sub-question names only that company
     fan_out: true                                       # "which company…" with no company named: one sub-question per company
   k: 8                                                  # chunks returned, and given to the model
-  device: null                                          # null = GPU if any; cpu when vLLM fills the GPU
+  device: null                                          # null = GPU if it has gpu_free_mb free, else cpu; or cpu / cuda
+  gpu_free_mb: 6144                                     # null: free GPU memory (MiB) the embedder and reranker need
 
 generation:                                             # V2
   model: openai:Qwen/Qwen3.6-27B-FP8                    # scripts/serve_vllm.sh qwen3.6-27b-fp8 · or anthropic:<id>
@@ -47,9 +48,14 @@ generation:                                             # V2
   max_tokens: 4000
   prompt: src/era_agent/prompts/answer.md              # rules + answer format; {corpus} = the filings table
 
+chat:                                                   # web UI follow-ups (src/era_agent/agent/history.py)
+  history: auto                                         # auto | append | rewrite | none: how a follow-up uses earlier turns
+  append_budget: 100000                                 # auto: append while earlier turns fit (tokens), then rewrite
+  turns: null                                           # earlier answered turns kept (null: all)
+
 agent:                                                  # V3
   tools: full                                           # full | text (no xbrl_facts, edgar_filings): the ablation
   max_calls: 20                                         # tool-call budget; calls past it return an error
   max_turns: 20                                         # model turns, a guard against loops
-  max_context: 20000                                    # input tokens past which the agent must answer (server: 32k)
+  max_context: 180000                                   # input tokens past which the agent must answer (server: 200k)
   result_chars: 16000                                   # a tool result is cut to this many characters

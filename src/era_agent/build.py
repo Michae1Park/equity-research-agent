@@ -8,7 +8,7 @@
   append like load, into the existing <method>.db: only filings it lacks (a newly fetched form,
          such as the DEF 14A proxies); facts, KPIs, market data and model versions are kept.
          Then `embed` adds only the new vectors
-  embed  vectors for every chunk (and child). Stop vLLM first, or set retrieval.device: cpu
+  embed  vectors for every chunk (and child). Stop vLLM first to embed on the GPU
   pages  each chunk's pages, written into an already built <method>.db in place
   facts  V4: XBRL company facts and inline facts of every 10-K and 10-Q into <method>.db
   market V4: prices, macro and ERP from the fetch caches into <method>.db
@@ -31,7 +31,7 @@ from pathlib import Path
 
 from era_agent.chunking import chunk, is_current
 from era_agent.preprocess import preprocess
-from era_agent.retrieval.embeddings import get_embedder
+from era_agent.retrieval.embeddings import GPU_FREE_MB, get_embedder
 from era_agent.retrieval.index import add_pages, embed_corpus, load
 from era_agent.store import Store
 
@@ -130,7 +130,10 @@ def embed_db(method: str, out: Path, retrieval: dict) -> None:
     """Vectors for <out>/<method>.db with the config's `retrieval:` embedder and device."""
     store = Store(out / f"{method}.db")
     t = time.time()
-    n = embed_corpus(store, get_embedder(retrieval["embedder"], retrieval["device"]))
+    embedder = get_embedder(
+        retrieval["embedder"], retrieval["device"], retrieval.get("gpu_free_mb", GPU_FREE_MB)
+    )
+    n = embed_corpus(store, embedder)
     print(f"{method}: embedded {n} in {time.time() - t:.0f} s")
 
 

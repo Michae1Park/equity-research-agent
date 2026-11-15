@@ -17,6 +17,7 @@ function Assistant({ m, live, onSource }: { m: AssistantMessage; live?: boolean;
       <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-neutral-300 to-neutral-700 text-sm text-white ${live ? 'animate-pulse' : ''}`}>✦</div>
       <div className="min-w-0 flex-1">
       {live && !m.answer && !m.error && <div className="mb-3"><LiveStatus events={trace} since={m.started} /></div>}
+      {m.rewritten && <p className="mb-2 text-xs text-stone-500">Interpreted as: <span className="italic">{m.rewritten}</span></p>}
       {m.error && <p className="text-sm text-red-700">{m.error}</p>}
       {m.answer && <AnswerBody answer={m.answer} onSource={onSource} />}
       {m.investigation && m.investigation.sub_runs.length > 0 && (

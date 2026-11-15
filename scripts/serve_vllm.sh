@@ -7,7 +7,8 @@
 #   scripts/serve_vllm.sh gpt-oss-20b           # the V2 judge, on port 8002 (experiments/v2/judge.py)
 #
 # Everything must fit on one L40S (48 GB). The era process also keeps the embedder and
-# reranker on the GPU (3–6 GB per process), so vLLM gets 72% of memory by default (the 27B 80%).
+# reranker on the GPU (3–6 GB per process), so vLLM gets 72% of memory by default; the 27B
+# takes 97% for a 200k context, and the embedder and reranker fall back to CPU.
 # VLLM_BIN points at the vLLM executable (default: `vllm` on PATH, else the vllm_py311 conda env).
 # ERA_CPUSET (env or .env) optionally pins the server to those CPU cores, e.g. 16-31.
 set -euo pipefail
@@ -28,12 +29,13 @@ case "$preset" in
   qwen3.6-27b-fp8)
     model=Qwen/Qwen3.6-27B-FP8
     # 28.5 GB of weights and no vision encoder. CUDA graphs (~17 tok/s vs ~11.5 eager) fit
-    # only with few sequences: the default 256 makes startup profiling fill the card. Graphs
-    # cost 0.08 GiB, but compiling leaves 1.6 GiB of KV cache at 72% (under one 32k request);
-    # 80% gives 3.2 requests at 32k and leaves ~8 GB for the embedder and reranker. An fp8 KV
-    # cache would double context but makes FlashInfer JIT-compile kernels, which needs nvcc.
-    MAX_LEN=${MAX_LEN_27B:-32768}
-    GPU_UTIL=${GPU_UTIL_27B:-0.80}
+    # only with few sequences: the default 256 makes startup profiling fill the card. 97%
+    # leaves a 232k-token KV cache: one 200k request (as docker-compose.yml). Only 16 of the
+    # 64 layers keep KV (~64 KB a token). The embedder and reranker then run on CPU
+    # (retrieval.device null picks it). An fp8 KV cache would make FlashInfer JIT-compile
+    # kernels, which needs nvcc.
+    MAX_LEN=${MAX_LEN_27B:-200000}
+    GPU_UTIL=${GPU_UTIL_27B:-0.97}
     args=(--tool-call-parser qwen3_coder --reasoning-parser qwen3
       --max-num-seqs "${MAX_SEQS_27B:-4}" --limit-mm-per-prompt '{"image":0,"video":0}')
     ;;
