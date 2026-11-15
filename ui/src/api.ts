@@ -55,12 +55,12 @@ export interface AssistantMessage {
   error?: string
   investigation?: { sub_runs: SubRun[]; log: string[]; fallback: boolean }
   rewritten?: string | null  // the follow-up as a standalone question (history: rewrite)
-  history?: { strategy: History; turns: number }
+  history?: { strategy: History; used: History; turns: number; tokens: number }
   trace?: TraceEvent[]
 }
 
 /** How a follow-up used the chat's earlier turns (config chat.history). */
-export type History = 'append' | 'rewrite' | 'none'
+export type History = 'auto' | 'append' | 'rewrite' | 'none'
 
 export interface UserMessage {
   role: 'user'

@@ -48,8 +48,9 @@ generation:                                             # V2
   prompt: src/era_agent/prompts/answer.md              # rules + answer format; {corpus} = the filings table
 
 chat:                                                   # web UI follow-ups (src/era_agent/agent/history.py)
-  history: append                                       # append | rewrite | none: how a follow-up uses earlier turns
-  turns: 5                                              # earlier answered turns kept
+  history: auto                                         # auto | append | rewrite | none: how a follow-up uses earlier turns
+  append_budget: 100000                                 # auto: append while earlier turns fit (tokens), then rewrite
+  turns: null                                           # earlier answered turns kept (null: all)
 
 agent:                                                  # V3
   tools: full                                           # full | text (no xbrl_facts, edgar_filings): the ablation

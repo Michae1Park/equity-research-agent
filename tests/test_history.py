@@ -42,3 +42,30 @@ def test_rewrite_falls_back_to_question():
 
     assert history.rewrite(model('"DASH risks?"\nextra'), turns, "risks?") == "DASH risks?"
     assert history.rewrite(model(""), turns, "risks?") == "risks?"
+
+
+def test_turns_all_when_no_limit():
+    assert len(history.turns(chat(), None)) == 2
+
+
+def test_auto_appends_under_budget_then_rewrites():
+    turns = history.turns(chat(), None)
+    size = history.tokens(turns)
+    assert history.resolve("auto", turns, size) == "append"
+    assert history.resolve("auto", turns, size - 1) == "rewrite"
+    assert history.resolve("auto", [], 0) == "none"
+    assert history.resolve("append", turns, 0) == "append"
+    assert history.resolve("none", turns, 10**6) == "none"
+
+
+def test_rewrite_sees_only_recent_turns_that_fit():
+    long = [{"question": f"q{i}", "answer": "x" * 2000} for i in range(100)]
+    seen = {}
+
+    def complete(messages, **_):
+        seen["prompt"] = messages[0]["content"]
+        return SimpleNamespace(text="q")
+
+    history.rewrite(SimpleNamespace(complete=complete), long, "next?")
+    assert "q99" in seen["prompt"] and "q0\n" not in seen["prompt"]
+    assert len(seen["prompt"]) < history.REWRITE_CHARS + 2000

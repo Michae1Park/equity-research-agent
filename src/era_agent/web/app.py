@@ -56,7 +56,7 @@ class ChatIn(BaseModel):
     mode: str
     question: str
     as_of: str
-    history: str | None = None  # append | rewrite | none; default: config chat.history
+    history: str | None = None  # auto | append | rewrite | none; default: config chat.history
 
 
 class ReportIn(BaseModel):
@@ -104,10 +104,11 @@ def create_app(settings: dict) -> FastAPI:
                           "created": time.time(), "messages": []}
             if record["id"] in running:
                 raise HTTPException(409, "this chat already has a question running")
-            strategy = body.history or settings.get("chat", {}).get("history", "none")
+            chat_config = settings.get("chat", {})
+            strategy = body.history or chat_config.get("history", "none")
             if strategy not in STRATEGIES:
                 raise HTTPException(400, f"history: {', '.join(STRATEGIES)}")
-            earlier = turns(record["messages"], settings.get("chat", {}).get("turns", 5))
+            earlier = turns(record["messages"], chat_config.get("turns"))
             user = {"role": "user", "mode": body.mode, "as_of": body.as_of,
                     "text": body.question, "time": time.time()}
             record["messages"].append(user)
@@ -118,7 +119,8 @@ def create_app(settings: dict) -> FastAPI:
         def work():
             try:
                 result = engine.chat(settings, body.mode, body.question, body.as_of, emit,
-                                     record["id"], earlier, strategy)
+                                     record["id"], earlier, strategy,
+                                     chat_config.get("append_budget", 100000))
                 result.pop("steps", None)  # the trace below holds them
                 message = {"role": "assistant", "time": time.time(), **result,
                            "trace": emit.log}

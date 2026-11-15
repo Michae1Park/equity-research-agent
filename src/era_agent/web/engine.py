@@ -139,15 +139,24 @@ def _trace_tools(agent, emit, scope: dict):
 
 def chat(settings: dict, mode: str, question: str, as_of: str, emit: Emitter,
          chat_id: str | None = None, history: list[dict] | None = None,
-         strategy: str = "none") -> dict:
+         strategy: str = "none", budget: int = 100000) -> dict:
     """One chat message in its mode → {"mode", "answer", "steps" | "investigation"}.
     history: the chat's earlier answered turns (agent.history.turns); strategy: how they are
-    used (append | rewrite | none)."""
-    history = history if strategy != "none" else []
+    used (auto | append | rewrite | none); budget: auto's append limit in tokens."""
+    from era_agent.agent.history import resolve, tokens
+
+    history = history or []
+    used = resolve(strategy, history, budget)
+    history = history if used != "none" else []
+    info = {"strategy": strategy, "used": used, "turns": len(history),
+            "tokens": tokens(history)}
     with telemetry.run("chat", question, mode=mode, chat_id=chat_id, as_of=as_of,
-                       history=strategy, turns=len(history)) as run:
-        result = _chat(settings, mode, question, as_of, emit, history, strategy)
-        result["history"] = {"strategy": strategy, "turns": len(history)}
+                       history=info) as run:
+        if strategy == "auto" and used == "rewrite":
+            emit("status", text=f"earlier turns ({info['tokens']} tokens) are over the "
+                                f"{budget}-token budget")
+        result = _chat(settings, mode, question, as_of, emit, history, used)
+        result["history"] = info
         run.finish(result, result.get("stop") or "ok")
         return result
 
