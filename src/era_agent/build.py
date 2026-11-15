@@ -8,7 +8,7 @@
   append like load, into the existing <method>.db: only filings it lacks (a newly fetched form,
          such as the DEF 14A proxies); facts, KPIs, market data and model versions are kept.
          Then `embed` adds only the new vectors
-  embed  vectors for every chunk (and child). Stop vLLM first, or set retrieval.device: cpu
+  embed  vectors for every chunk (and child). Stop vLLM first to embed on the GPU
   pages  each chunk's pages, written into an already built <method>.db in place
   facts  V4: XBRL company facts and inline facts of every 10-K and 10-Q into <method>.db
   market V4: prices, macro and ERP from the fetch caches into <method>.db

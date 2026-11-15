@@ -38,7 +38,7 @@ retrieval:                                              # V1
     rewrite: true                                       # each company's sub-question names only that company
     fan_out: true                                       # "which company…" with no company named: one sub-question per company
   k: 8                                                  # chunks returned, and given to the model
-  device: null                                          # null = GPU if any; cpu when vLLM fills the GPU
+  device: null                                          # null = GPU if it has 6 GB free, else cpu; or cpu / cuda
 
 generation:                                             # V2
   model: openai:Qwen/Qwen3.6-27B-FP8                    # scripts/serve_vllm.sh qwen3.6-27b-fp8 · or anthropic:<id>
