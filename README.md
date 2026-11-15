@@ -22,22 +22,16 @@
 
 An autonomous equity research agent covering eight US travel and mobility companies (**BKNG, EXPE, ABNB, TRIP, UBER, LYFT, DASH, CART**). Operating under strict as-of date constraints to eliminate look-ahead bias, it grounds every output in deterministic financial models and verified SEC data to produce audit-ready earnings notes.
 
-<p align="center"><b>Research Mode</b></p>
+<p align="center"><b>Research Mode · multi-turn chat</b></p>
 
 <p align="center">
-  <img src="docs/img/demo-research.gif" alt="Research mode: the agent forecasts Uber's Q3 2026 revenue from the model, compares it with gross bookings guidance, and every claim is verified" width="820">
+  <img src="docs/img/demo-research.gif" alt="Research mode conversation: the agent forecasts Uber's Q3 2026 revenue from the model against gross bookings guidance, then follows up with 'And Lyft?' and 'Now give me the bear case for Lyft.', carrying the context across turns" width="820">
 </p>
 
 <p align="center"><b>Ask Mode</b></p>
 
 <p align="center">
-  <img src="docs/img/demo-ask.gif" alt="Ask mode: a cited answer on Uber's Q2 2026 gross bookings growth with a source opened in the drawer, then a decline because Booking does not disclose hotel occupancy" width="820">
-</p>
-
-<p align="center"><b>Investigate Mode</b></p>
-
-<p align="center">
-  <img src="docs/img/demo-investigate.gif" alt="Investigate mode: Uber vs Lyft gross bookings growth and Q3 2026 forecasts, split into an Ask and a Research sub-run" width="820">
+  <img src="docs/img/demo-ask.gif" alt="Ask mode: a cited answer on Uber's Q2 2026 gross bookings growth with the earnings release opened in the source drawer, then a decline because Booking does not disclose hotel occupancy" width="820">
 </p>
 
 <p align="center"><b>Report</b></p>
@@ -54,7 +48,7 @@ An autonomous equity research agent covering eight US travel and mobility compan
 |---|---|---|
 | **Ask** | Factual question<br>+ as-of | • Retrieves filed KPIs and passages<br>• Returns a concise, citation-verified answer (or declines if unsupported) |
 | **Research** | Quantitative question<br>+ as-of | • Runs the driver-based forecast and valuation engine<br>• Returns computed figures, model assumptions and cell ids |
-| **Investigate** | Multi-part question<br>+ as-of | • Splits the question into Ask and Research sub-runs<br>• Synthesizes them into a single claim-checked answer |
+| **Investigate** | One question needing both filed facts and the model<br>+ as-of | • Splits it into Ask and Research sub-runs (e.g., *"What drove Uber's Q2 bookings beat, and does the Q3 forecast reflect it?"*)<br>• Synthesizes them into a single claim-checked answer |
 | **Report** | Ticker<br>+ as-of | • Runs an 11-step pipeline<br>• Returns a 10-section earnings note (Markdown and PDF), a live-formula Excel workbook and an evidence and exception log |
 
 <details>
@@ -179,7 +173,7 @@ docker compose up --build    # containers: vLLM, API and UI together, UI at http
 <details>
 <summary><b>Once open: what you can do</b></summary>
 
-- **Chat:** Pick a mode, set the as-of date, and ask (e.g., Ask mode with as-of `2026-11-12`: *"What was Uber's gross bookings growth in Q2 2026 and what drove it?"*). Every answer renders a live execution trace and an interactive source drawer.
+- **Chat:** Pick a mode, set the as-of date, and ask (e.g., Ask mode with as-of `2026-11-12`: *"What was Uber's gross bookings growth in Q2 2026 and what drove it?"*). Every answer renders a live execution trace and an interactive source drawer. Follow-ups (*"And Lyft?"*, *"Now the bear case."*) carry the earlier turns' context.
 - **Reports:** Generate a draft earnings note for any covered ticker and review the output.
 
 </details>
