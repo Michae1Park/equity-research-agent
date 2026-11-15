@@ -22,25 +22,27 @@
 
 An autonomous equity research agent covering eight US travel and mobility companies (**BKNG, EXPE, ABNB, TRIP, UBER, LYFT, DASH, CART**). Operating under strict as-of date constraints to eliminate look-ahead bias, it grounds every output in deterministic financial models and verified SEC data to produce audit-ready earnings notes.
 
-<p align="center"><b>Research Mode · multi-turn chat</b></p>
+<p align="center"><br><b>Research Mode</b><br><sub>multi-turn chat</sub><br></p>
 
 <p align="center">
   <img src="docs/img/demo-research.gif" alt="Research mode conversation: the agent forecasts Uber's Q3 2026 revenue from the model against gross bookings guidance, then follows up with 'And Lyft?' and 'Now give me the bear case for Lyft.', carrying the context across turns" width="820">
 </p>
 
-<p align="center"><b>Ask Mode</b></p>
+<p align="center"><br><b>Ask Mode</b><br><sub>cited answer or decline</sub><br></p>
 
 <p align="center">
   <img src="docs/img/demo-ask.gif" alt="Ask mode: a cited answer on Uber's Q2 2026 gross bookings growth with the earnings release opened in the source drawer, then a decline because Booking does not disclose hotel occupancy" width="820">
 </p>
 
-<p align="center"><b>Report</b></p>
+<p align="center"><br><b>Report</b><br></p>
 
 <p align="center">
   <img src="docs/img/demo-report.gif" alt="Reports page: the UBER Q2 2026 earnings-update note scrolled from the executive summary through results, debates and the financial summary" width="820">
 </p>
 
 <p align="center"><sub><i>Report demo: price-derived figures (rating, price target, market cap, multiples, WACC, DCF values) are made up, because the real ones come from licensed data. Filing-derived figures (revenue, EBITDA, gross bookings) are real. Run the report locally with your own keys for the true numbers.</i></sub></p>
+
+<br>
 
 ### What It Does
 
