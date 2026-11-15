@@ -121,6 +121,13 @@ def coverage_table(store) -> str:
     return "\n".join(lines)
 
 
+def context_cap(model, max_context: int, max_tokens: int) -> int:
+    """max_context, never past the server's window: its length less the output budget and a
+    1/8 margin (200k → 171k, 32k → 24.6k)."""
+    window = getattr(model, "context_window", lambda: None)()
+    return min(max_context, window - max_tokens - window // 8) if window else max_context
+
+
 @dataclass
 class Agent:
     model: Model
@@ -133,6 +140,7 @@ class Agent:
     prompt: Path = PROMPT
 
     def __post_init__(self):
+        self.max_context = context_cap(self.model, self.max_context, self.max_tokens)
         self.system = build_system(self.toolbox, self.max_calls, self.prompt)
         graph = StateGraph(State)
         graph.add_node("model", self._model)
