@@ -1,13 +1,3 @@
-"""The spec's example model-change workbook (docs/EXAMPLE_UBER_Q2_2026_MODEL_CHANGE_WORKBOOK.xlsx).
-
-  uv run python experiments/v4/example_workbook.py
-
-Every figure is invented (spec §2.3 example). It reproduces the note's sections 2, 4, 6 and 7
-with live formulas, in the tabs a real run writes (spec §2.3): Model, Assumptions, Summary,
-Scenarios, Valuation, DCF, Revisions, Model (prior), Checks, Log. Blue = input, black =
-formula, green = a link to another tab. The Model tab is an excerpt.
-"""
-
 from pathlib import Path
 
 from openpyxl import Workbook
@@ -35,7 +25,6 @@ def tab(name: str, title: str, widths=(44, 14, 14, 14, 14, 14, 14, 30)):
 
 
 def put(ws, row: list, fmt: str | None = None):
-    """Append a row; colour each cell: str starting '=' with '!' green, '=' black, numbers blue."""
     ws.append(row)
     r = ws.max_row
     for c in ws[r]:
@@ -56,7 +45,6 @@ def header(ws, row: list):
         c.font = BOLD
 
 
-# --- Assumptions: every input the formulas read ----------------------------------------------
 A = {}
 asm = tab("Assumptions", "Assumptions (blue cells the formulas reference)", (52, 14, 10))
 header(asm, ["Assumption", "Value", "Unit"])
@@ -88,7 +76,6 @@ for key, label, value, unit in [
     r = put(asm, [label, value, unit])
     A[key] = f"Assumptions!$B${r}"
 
-# --- Model (excerpt) --------------------------------------------------------------------------
 m = tab("Model", "Model excerpt: UBER Q2 2026 (Apr-Jun), $B unless noted",
         (40, 12, 12, 10, 12, 10, 12, 12, 30))
 header(m, ["Headline (section 2.1)", "Q2 2026A", "Q2 2025A", "Y/Y", "Our est.", "Var.",
@@ -162,7 +149,6 @@ put(m, ["Cash taxes", None, None, 0.3, 0.17])
 put(m, ["Capex", None, None, 0.2, 0.1])
 M["sbc"], M["tax"], M["capex"] = r + 3, r + 4, r + 5
 
-# --- Model (prior): the parent version's values -------------------------------------------------
 p = tab("Model (prior)", "Model (prior): UBER:v1 as saved (values)", (40, 14))
 header(p, ["Line", "Value"])
 P = {}
@@ -173,7 +159,6 @@ for key, label, v in [("q3_rev", "Q3 2026E revenue", 13.4),
                       ("pt", "12-month price target", 95.0)]:
     P[key] = f"'Model (prior)'!$B${put(p, [label, v])}"
 
-# --- Revisions (section 4.1) ---------------------------------------------------------------------
 rv = tab("Revisions", "Estimate revisions: old vs. new, $B (old value is the denominator)",
          (30, 10, 10, 12, 12, 24, 12))
 header(rv, ["Line", "Old", "New", "Change ($B)", "Change (%)", "Source", "Confidence"])
@@ -189,7 +174,6 @@ for label, old, new, conf in [
              "Reported + assumption", conf])
     rv[f"E{r}"].number_format = "+0.0%;-0.0%"
 
-# --- DCF ----------------------------------------------------------------------------------------
 d = tab("DCF", "DCF, base case ($B): 10 years, the modeled years then faded; Gordon terminal",
         (34, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10))
 header(d, ["Year", *[f"{y}E" for y in range(2026, 2036)]])
@@ -198,7 +182,7 @@ row = ["Unlevered FCF (EBITDA - SBC - tax - capex)",
        *[f"=Model!{c}{M['ebitda_y']}-Model!{c}{M['sbc']}-Model!{c}{M['tax']}"
          f"-Model!{c}{M['capex']}" for c in "DE"]]
 cols = "BCDEFGHIJK"
-for i in range(2, 10):  # faded years: growth = previous growth x fade
+for i in range(2, 10):
     c, p1, p2 = cols[i], cols[i - 1], cols[i - 2]
     row.append(f"={p1}{r_fcf}*(1+({p1}{r_fcf}/{p2}{r_fcf}-1)*{A['fade']})")
 put(d, row, "0.00")
@@ -223,7 +207,6 @@ for wacc in (0.085, 0.095, 0.105):
     put(d, [wacc, *cells], "0")
     d[f"A{r}"].number_format = "0.0%"
 
-# --- Valuation (section 6) ----------------------------------------------------------------------
 v = tab("Valuation", "Valuation: UBER (2027E EV / adj. EBITDA)", (40, 12, 12, 12, 12))
 header(v, ["Peers", "2027E EV/EBITDA"])
 peer0 = v.max_row + 1
@@ -252,7 +235,6 @@ r_ret = put(v, ["Return vs price", None, None, None, f"=E{r_pt}/{A['price']}-1"]
 r_rat = put(v, ["Rating", None, None, None,
                 f'=IF(E{r_ret}>={A["buy"]},"Buy",IF(E{r_ret}<={A["sell"]},"Sell","Hold"))'])
 
-# --- Scenarios and sensitivities (sections 6 and 7) --------------------------------------------
 sc = tab("Scenarios", "Scenarios: 2027E adj. EBITDA by case; one-at-a-time sensitivities",
          (40, 14, 16, 14))
 header(sc, ["Scenario", "2027E adj. EBITDA", "PT", "Weight"])
@@ -270,7 +252,6 @@ for label, change in [("Take rate -50 bps", f"=-0.005*{A['gb27']}"),
              f"={A['w_mult']}*B{r}*Valuation!B{r_med}/{A['shares']}"
              f"+{A['w_dcf']}*DCF!B{r_dps}*B{r}/{base_e}"], "0.00")
 
-# --- Summary --------------------------------------------------------------------------------------
 su = tab("Summary", "Summary: UBER, as of 2026-08-06 (DRAFT for senior review)", (36, 16))
 put(su, ["Draft rating", f"=Valuation!E{r_rat}"])
 put(su, ["Price ($)", f"={A['price']}"], "0.00")
@@ -285,7 +266,6 @@ put(su, ["Parity (formula cells matching the model)", "750/750"])
 put(su, ["Rating / PT change vs. the prior version (v1)",
          f'=IF(AND(B4={P["rating"]},ROUND(B6,0)={P["pt"]}),"none","changed")'])
 
-# --- Checks ---------------------------------------------------------------------------------------
 ch = tab("Checks", "Checks (layer 2): any FAIL blocks the note", (34, 10, 50))
 header(ch, ["Check", "Status", "Test"])
 for name, test, desc in [
@@ -306,7 +286,6 @@ for name, test, desc in [
 ]:
     put(ch, [name, f"={test}", desc])
 
-# --- Log ------------------------------------------------------------------------------------------
 lg = tab("Log", "Evidence and exception log", (8, 40, 12, 40))
 header(lg, ["ID", "Figure", "Value", "Source id"])
 for i, (fig, val, src) in enumerate([

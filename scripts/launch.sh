@@ -26,13 +26,14 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-wait_for() {  # url, name, pid, log
-  echo "Waiting for $2..."
-  until curl -sf "$1" >/dev/null; do
-    kill -0 "$3" 2>/dev/null || { echo "$2 exited; see $4" >&2; tail -20 "$4" >&2; exit 1; }
+wait_for() {
+  local url=$1 name=$2 pid=$3 log=$4
+  echo "Waiting for $name..."
+  until curl -sf "$url" >/dev/null; do
+    kill -0 "$pid" 2>/dev/null || { echo "$name exited; see $log" >&2; tail -20 "$log" >&2; exit 1; }
     sleep 3
   done
-  echo "$2 ready"
+  echo "$name ready"
 }
 
 uv sync --extra web --extra local -q

@@ -1,5 +1,3 @@
-"""XBRL facts and derived quarters (facts/xbrl.py, facts/quarters.py), on a synthetic company."""
-
 import pytest
 
 from era_agent.asof import AsOf
@@ -15,7 +13,6 @@ TWO = {
 
 
 def row(start, end, val, accn, filed, form="10-Q"):
-    """A company-facts row; `val` in USD millions."""
     return {"start": start, "end": end, "val": val * 1e6, "accn": accn, "filed": filed, "form": form}
 
 
@@ -23,7 +20,7 @@ def cf(concept, *rows):
     return {"facts": {"us-gaap": {concept: {"units": {"USD": list(rows)}}}}}
 
 
-YEAR = [  # operating cash flow, year to date, as 10-Qs and a 10-K report it
+YEAR = [
     row("2025-01-01", "2025-03-31", 100, "q1", "2025-05-01"),
     row("2025-01-01", "2025-06-30", 250, "q2", "2025-08-01"),
     row("2025-01-01", "2025-09-30", 450, "q3", "2025-11-01"),
@@ -40,7 +37,6 @@ def store_with(tmp_path, *payloads, asof="2026-10-27"):
 
 
 def values(quarters):
-    """Period → (value in USD millions, derivation)."""
     return {q.period: (q.value / 1e6, q.derivation) for q in quarters}
 
 
@@ -54,7 +50,7 @@ def test_quarters_from_year_to_date(tmp_path):
         "Q4": (250, "fy_minus_9m"),
         "FY": (700, "direct"),
     }
-    assert [c["status"] for c in checks(s, "TEST", "ocf", FLOW, qs)] == ["pass"]  # q4_ties
+    assert [c["status"] for c in checks(s, "TEST", "ocf", FLOW, qs)] == ["pass"]
     q4 = next(q for q in qs if q.period == "Q4")
     assert q4.id == "q:TEST:ocf:2025Q4" and q4.filed == "2026-02-10" and len(q4.inputs) == 2
 
@@ -82,7 +78,7 @@ def test_one_concept_per_year(tmp_path):
         row("2025-04-01", "2025-06-30", 149, "q2", "2025-08-01"),
     )
     s = store_with(tmp_path, cash_flow, income)
-    assert values(derive(s, "TEST", "sbc", TWO))["Q2"] == (150, "ytd_diff")  # not 149 mixed in
+    assert values(derive(s, "TEST", "sbc", TWO))["Q2"] == (150, "ytd_diff")
 
 
 def test_inline_facts_keep_dimensions_and_company_concepts():
@@ -98,7 +94,7 @@ def test_inline_facts_keep_dimensions_and_company_concepts():
       <ix:nonFraction id="f4" name="us-gaap:OtherIncome" contextRef="c1" unitRef="usd" sign="-" format="ixt:fixed-zero">—</ix:nonFraction>
     </body></html>"""
     facts = {f.id.split(":")[-1]: f for f in inline_facts("T", html, "acc", "10-Q", "2026-08-05")}
-    assert set(facts) == {"f1", "f2", "f4"}  # f3: standard and consolidated, company facts has it
+    assert set(facts) == {"f1", "f2", "f4"}
     assert facts["f1"].value == pytest.approx(7363e6) and facts["f1"].dims == {
         "us-gaap:StatementBusinessSegmentsAxis": "uber:MobilityMember"
     }
@@ -107,12 +103,12 @@ def test_inline_facts_keep_dimensions_and_company_concepts():
 
 
 def test_a_recast_year_reads_restated_not_fail(tmp_path):
-    recast = [  # a later 10-Q re-reports H1 and Q2 on a new basis; Q1 and 9M are not yet
+    recast = [
         row("2025-01-01", "2025-06-30", 220, "q2-2026", "2026-08-01"),
         row("2025-04-01", "2025-06-30", 130, "q2-2026", "2026-08-01"),
     ]
     s = store_with(tmp_path, cf("NetCashProvidedByUsedInOperatingActivities", *YEAR, *recast))
     qs = derive(s, "TEST", "ocf", FLOW)
     assert {c["status"] for c in checks(s, "TEST", "ocf", FLOW, qs)} == {"restated"}
-    assert next(q for q in qs if q.period == "Q3").restated  # 9M − H1, H1 re-reported
+    assert next(q for q in qs if q.period == "Q3").restated
     assert not next(q for q in qs if q.period == "Q1").restated

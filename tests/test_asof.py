@@ -1,5 +1,3 @@
-"""The as-of rule (V4 design doc §2.5): AsOf itself, the Store's filter, and the leak test."""
-
 import re
 import sqlite3
 from datetime import date
@@ -10,7 +8,7 @@ from era_agent.retrieval.index import load
 from era_agent.store import Store
 from test_store import APPLE, filing
 
-FILED = "2025-11-01"  # test_store.filing's filing date
+FILED = "2025-11-01"
 
 
 def test_strictly_before():
@@ -27,7 +25,7 @@ def test_latest_takes_the_newest_visible_restatement():
     def pick(asof):
         return {k: v[1] for k, v in asof.latest(rows, lambda r: r[0], lambda r: r[2]).items()}
 
-    assert pick(AsOf.of("2026-01-01")) == {"rev": 100, "eps": 1}  # before the restatement
+    assert pick(AsOf.of("2026-01-01")) == {"rev": 100, "eps": 1}
     assert pick(AsOf.of("2026-03-01")) == {"rev": 105, "eps": 1}
     assert pick(AsOf.of("2025-01-01")) == {}
 
@@ -78,7 +76,6 @@ def test_a_v3_database_is_migrated_and_backfilled(tmp_path):
 
 
 def test_v4_modules_always_pass_an_asof():
-    """V3 may open a Store at today's date; V4 code (facts/, research/) never relies on that."""
     src = Path(__file__).resolve().parents[1] / "src" / "era_agent"
     for folder in ("facts", "research"):
         for path in (src / folder).rglob("*.py"):

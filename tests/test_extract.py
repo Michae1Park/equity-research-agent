@@ -1,5 +1,3 @@
-"""KPI extraction (facts/extract.py) with a scripted model, and layer-1 scoring."""
-
 import json
 
 import pytest
@@ -17,7 +15,7 @@ OUTLOOK = "For Q3 2026, we anticipate: Gross Bookings of $58.25 billion to $60.2
 
 
 @pytest.fixture(autouse=True)
-def uber_in_corpus(monkeypatch):  # the default corpus is V3's; these tests load a V4 release
+def uber_in_corpus(monkeypatch):
     monkeypatch.setattr(
         "era_agent.retrieval.index.company_by_ticker",
         lambda t: Company("UBER", 1543151, "Uber Technologies, Inc."),
@@ -89,7 +87,7 @@ def test_valid_rows_are_kept_and_bad_ones_repaired_once(tmp_path):
         **GOOD_GB,
         "metric": "trips",
         "segment": "total",
-        "value": 3268,  # prior year
+        "value": 3268,
         "quote": "| Trips | 3,268 | 3,867 | 18% |",
     }
     invented = {**GOOD_GB, "metric": "mapcs", "value": 208, "quote": "MAPCs of 208 million"}
@@ -106,7 +104,7 @@ def test_valid_rows_are_kept_and_bad_ones_repaired_once(tmp_path):
         ("trips", 3867),
     }
     assert out.guidance == [{k: GUIDE[k] for k in extract._clean(GUIDE, "guidance")}]
-    assert [e["row"]["metric"] for e in out.exceptions] == ["mapcs"]  # quote not in the chunk
+    assert [e["row"]["metric"] for e in out.exceptions] == ["mapcs"]
 
 
 def test_validate_rejects_unknown_metric_segment_and_value_not_in_quote(tmp_path):
@@ -118,7 +116,7 @@ def test_validate_rejects_unknown_metric_segment_and_value_not_in_quote(tmp_path
     assert "segment" in extract.validate({**GOOD_GB, "segment": "x"}, "kpi", chunks, entry)
     assert "not in the quote" in extract.validate({**GOOD_GB, "value": 5}, "kpi", chunks, entry)
     assert extract.validate(GUIDE, "guidance", chunks, entry) is None
-    assert extract.validate({**GUIDE, "high": None}, "guidance", chunks, entry) is None  # a floor
+    assert extract.validate({**GUIDE, "high": None}, "guidance", chunks, entry) is None
     assert "low" in extract.validate({**GUIDE, "low": None}, "guidance", chunks, entry)
 
 
@@ -179,7 +177,7 @@ def test_growth_pair_finds_the_later_column():
     assert extract.growth_pair("Gross Bookings of $58.25 billion to $60.25 billion") is None
     assert (
         extract.growth_pair("| Diluted | $1.20 | $3.11 | $1.36 | $4.57 |") is None
-    )  # no growth column
+    )
 
 
 def test_definition_version_follows_the_recast():

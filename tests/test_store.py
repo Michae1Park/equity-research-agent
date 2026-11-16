@@ -1,5 +1,3 @@
-"""The SQLite store, as V1's index loads it: chunk ids and metadata, children, search filters."""
-
 import pytest
 
 from era_agent.retrieval.index import load
@@ -7,8 +5,6 @@ from era_agent.store import Store
 
 
 def filing(ticker: str, year: int, period_end: str, chunks: list[dict]) -> tuple:
-    """(metadata.json, document, chunks) for one filing, as era_agent.retrieval.index.load
-    takes them."""
     meta = {
         "ticker": ticker,
         "fiscal_year": year,
@@ -85,11 +81,11 @@ def test_kpis_and_guidance_are_dated_by_their_release(tmp_path):
     store = Store(tmp_path / "s.db")
     store.enable_facts()
     store.add_extractions("UBER", "2026Q2", "2026-08-05", [kpi], [guide])
-    store.add_extractions("UBER", "2026Q2", "2026-08-05", [kpi], [guide])  # reload replaces
+    store.add_extractions("UBER", "2026Q2", "2026-08-05", [kpi], [guide])
     after = Store(tmp_path / "s.db", AsOf(date(2026, 8, 6)))
     assert [(k["period"], k["value"]) for k in after.kpis("uber")] == [("2026Q2", 3.1)]
     assert [(g["segment"], g["issued_in"]) for g in after.guidance("UBER")] == [("total", "2026Q2")]
-    before = Store(tmp_path / "s.db", AsOf(date(2026, 8, 5)))  # strictly before the release
+    before = Store(tmp_path / "s.db", AsOf(date(2026, 8, 5)))
     assert before.kpis("UBER") == [] and before.guidance("UBER") == []
 
 

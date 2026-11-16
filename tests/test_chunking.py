@@ -1,5 +1,3 @@
-"""V0 chunking: the chunkers' sentence cuts (C5), table captions (C3) and table row children."""
-
 from era_agent.chunking import agentic
 from era_agent.chunking import common as chunkers
 
@@ -63,12 +61,12 @@ def test_header_rows():
     ]
     assert chunkers.header_rows(dates) == 2
     assert chunkers.header_rows([["2025", "2024"], ["Federal:"], ["Current", "$1", "$2"]]) == 1
-    assert chunkers.header_rows([["Name", "Role"], ["Tim Cook", "CEO"]]) == 1  # no numbers
+    assert chunkers.header_rows([["Name", "Role"], ["Tim Cook", "CEO"]]) == 1
 
 
 def test_row_groups_repeat_the_caption_and_header_only(monkeypatch):
     monkeypatch.setattr(chunkers, "tokens", len)
-    monkeypatch.setattr(chunkers, "TABLE_CHARS", 80, raising=False)  # set by configure()
+    monkeypatch.setattr(chunkers, "TABLE_CHARS", 80, raising=False)
     rows = [["2025", "2024"]] + [[f"Line {n}", f"${n},000", f"${n},500"] for n in range(6)]
     blocks = [
         {"id": "c", "kind": "paragraph", "text": "(In millions)", "heading_path": [], "page": 1},
@@ -85,7 +83,6 @@ def test_row_groups_repeat_the_caption_and_header_only(monkeypatch):
             "tokens": 29,
             "heading_path": [],
         }
-    # every data row is in exactly one group, and has exactly one row child
     body = [ln for c in chunks for ln in c["text"].splitlines()[2:]]
     assert body == ["| " + " | ".join(r) + " |" for r in rows[1:]]
     kids = [k["text"] for c in chunks for k in c["children"] if k["kind"] == "row"]
@@ -114,10 +111,8 @@ def test_agentic_segments_start_at_each_risk_factor_and_its_category():
 def test_agentic_chunks_never_end_on_a_heading():
     text, _ = agentic.render_markdown({"item": "1A", "title": "Risk Factors", "blocks": RISKS})
     at = text.index
-    # a cut after "### Risk two." moves before it; one after both headings moves before both
     cuts = agentic._glue_headings(text, [0, at("Body one."), at("Body two.")])
     assert cuts == [0, at("## Business Risks"), at("### Risk two.")]
-    # a chunk of only headings goes: its headings join the next chunk
     assert agentic._glue_headings(text, [0, at("### Risk one."), at("Body one.")]) == [
         0,
         at("## Business Risks"),

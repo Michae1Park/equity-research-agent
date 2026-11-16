@@ -1,26 +1,3 @@
-"""Outside data as forecast inputs (V4 design doc §6.2; spec §3.2 "Outside inputs").
-
-research.yaml `forecast.outside` maps one starting growth rate (`<line>.g0`) per company to a
-monthly outside series (NYC TLC trips, BTS airline passengers, FRED restaurant sales or CPI).
-With `method: nowcast`, for each mapping:
-
-  1. the series' y/y per month, from values visible at the as-of (dated and published before it,
-     each at its latest visible vintage: Store.series);
-  2. the window: the three months ending at the latest visible month, k months before the end
-     of the first forecast quarter (k = 0 when the series already covers that quarter; TLC, BTS
-     and FRED mostly lag, so k is usually 3 to 6);
-  3. an OLS fit of the driver's history y/y (the `<line>` values) on the series' mean y/y over
-     the window at the same lag k before each history quarter (at least `min_quarters`), so the
-     fit uses the series as it is used at the as-of;
-  4. a slope b ≤ 0 is not used (each mapping expects the driver to move with the series);
-  5. g0 = (1 − w) × default + w × (a + b × x), x the window's mean y/y and w = `weight` × R²
-     (a weak fit moves g0 little).
-
-Every use and every skip is logged as an `info` exception. A guidance anchor that solves the same
-assumption overrides the result in the first forecast quarter (management's guide wins). With
-`method: off` (the ablation) nothing changes.
-"""
-
 import statistics
 
 from era_agent.research.model.graph import Model
@@ -28,7 +5,6 @@ from era_agent.store import Store
 
 
 def monthly_yoy(points: list[tuple[str, float]]) -> dict[str, float]:
-    """{YYYY-MM: y/y} for monthly points (date YYYY-MM-DD) whose month a year earlier is known."""
     by_month = {d[:7]: v for d, v in points}
     out = {}
     for month, value in by_month.items():
@@ -51,13 +27,11 @@ def quarter_end(quarter: str) -> int:
 
 
 def window(yoy: dict[str, float], end: int) -> float | None:
-    """Mean y/y of the three months ending at month index `end`; None if one is missing."""
     values = [yoy.get(month_name(end - i)) for i in (2, 1, 0)]
     return None if None in values else sum(values) / 3
 
 
 def fit(xs: list[float], ys: list[float]) -> tuple[float, float, float]:
-    """(a, b, R²) of y = a + b·x by least squares."""
     mx, my = statistics.fmean(xs), statistics.fmean(ys)
     sxx = sum((x - mx) ** 2 for x in xs)
     if not sxx:
@@ -71,7 +45,6 @@ def fit(xs: list[float], ys: list[float]) -> tuple[float, float, float]:
 
 def adjust(model: Model, store: Store, defaults: dict[str, float], settings: dict
            ) -> tuple[dict[str, float], list[dict]]:
-    """The defaults with the mapped g0s moved toward the outside nowcast, and the log rows."""
     cfg = settings["forecast"].get("outside") or {}
     spec = (cfg.get("inputs") or {}).get(model.ticker)
     if cfg.get("method") in (None, False, "off") or not spec or not model.forecast:

@@ -46,9 +46,6 @@ def sections_present(note: str) -> bool:
 
 def seeded(note: str, facts: Facts, seeds: int, rng: random.Random,
            blocks: list[str] | None = None, slots: list[dict] | None = None) -> tuple[int, int]:
-    """(caught, planted): corrupt one figure of the body at a time (×1.07, then ×10) and count
-    the corruptions the lint flags. Seeds are drawn from the figures the trace reads (never a
-    date or section number), at least 1 in size."""
     body = note.split("\n## EVIDENCE LOG")[0]
     lines = body.splitlines()
     candidates = [(i, raw) for i, line in enumerate(lines) if not line.startswith("#")

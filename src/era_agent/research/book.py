@@ -1,19 +1,3 @@
-"""The model book: a session's models at one as-of, for Research mode's tools and model: ids.
-
-  model:<T>:<as_of>:base:<line>.<period>        the default forecast at the as-of (anchored to
-                                                 guidance); rebuilt on demand, so always citable
-  model:<T>:<as_of>:scratch-<n>:<line>.<period>  a run_scenario run in this session (design §7.3:
-                                                 scratch runs are not versions)
-  model:<T>:<as_of>:val-<version>:<field>        a valuation output (price_target, ev, …;
-                                                 rating resolves to its text)
-  model:<T>:<as_of>:var-<period>:<field>          variance_review's revenue bridge for a quarter
-  model:<T>:<as_of>:v<n>:<line>.<period>         a saved Report version (model_versions, V4.6):
-  model:<T>:<as_of>:v<n>:<field>                 its model.json line, or a valuation.json field;
-                                                 resolves only for a version saved strictly
-                                                 before the store's as-of (research_report)
-Ratios resolve, and the model tools show them, in percent.
-"""
-
 import json
 import re
 from dataclasses import dataclass, field
@@ -28,13 +12,12 @@ from era_agent.store import Store
 class Book:
     store: Store
     settings: dict = field(default_factory=knobs)
-    forecasts: dict[str, Forecast] = field(default_factory=dict)  # base, per ticker
-    scratch: dict[str, Model] = field(default_factory=dict)  # "T:scratch-n" → model
-    valuations: dict[str, dict] = field(default_factory=dict)  # "T:version" → valuation
-    earlier: dict[str, "Book"] = field(default_factory=dict)  # as-of → a book then (variance)
+    forecasts: dict[str, Forecast] = field(default_factory=dict)
+    scratch: dict[str, Model] = field(default_factory=dict)
+    valuations: dict[str, dict] = field(default_factory=dict)
+    earlier: dict[str, "Book"] = field(default_factory=dict)
 
     def at(self, as_of: str) -> "Book":
-        """The book at an earlier as-of (a prior forecast); never a later one."""
         if as_of >= self.as_of:
             raise ValueError(f"{as_of} is not before this book's as-of {self.as_of}")
         if as_of not in self.earlier:
@@ -83,7 +66,6 @@ class Book:
         return f"model:{ticker}:{self.as_of}:{version}:{line}.{period}"
 
     def resolve(self, ticker: str, as_of: str, version: str, key: str) -> dict | None:
-        """{value, unit} for a model: id, or None."""
         if SAVED.fullmatch(version):
             return saved_value(self.store, ticker, as_of, version, key)
         if as_of < self.as_of and version == "base":
@@ -107,18 +89,17 @@ class Book:
         value, unit = model.value(line, period), model.line(line).unit
         if value is None:
             return None
-        if unit == "fraction":  # ratios are written as percentages
+        if unit == "fraction":
             return {"value": value * 100, "unit": "percent"}
         return {"value": value, "unit": unit}
 
 
-SAVED = re.compile(r"v\d+")  # a saved Report version's part of a model: id
+SAVED = re.compile(r"v\d+")
 PERIOD = re.compile(r"\d{4}Q[1-4]|FY\d{4}")
 
 
 def valuation_field(v: dict, key: str) -> dict | None:
-    """{value, unit} (or {text} for the rating) of one valuation output."""
-    multiples = v.get("multiples") or v.get("multiples_2027e") or {}  # older files: _2027e
+    multiples = v.get("multiples") or v.get("multiples_2027e") or {}
     for where in (v, multiples, (v.get("scenarios") or {}).get("base") or {}):
         if key in where:
             value = where[key]
@@ -129,7 +110,7 @@ def valuation_field(v: dict, key: str) -> dict | None:
         return {"text": value}
     if not isinstance(value, int | float):
         return None
-    if key in ("return", "fcf_yield"):  # fractions, written as percentages
+    if key in ("return", "fcf_yield"):
         return {"value": value * 100, "unit": "percent"}
     unit = "USD" if key in ("price_target", "price", "dcf_pt", "multiple_pt") else (
         "USD millions" if key in ("ev", "market_cap") else "")
@@ -138,9 +119,6 @@ def valuation_field(v: dict, key: str) -> dict | None:
 
 def saved_version(store, ticker: str, as_of: str | None = None,
                   version: str | None = None) -> dict | None:
-    """A saved version visible at the store's as-of: by id (and its as-of), or the latest made
-    on or before `as_of` (default: the latest visible). Adds its model.json and
-    valuation.json (`model`, `valuation`)."""
     rows = store.model_versions(ticker)
     if version:
         rows = [r for r in rows if r["id"] == f"{ticker}:{version}"
@@ -170,7 +148,6 @@ def saved_line(model: dict, line: str, period: str) -> dict | None:
 
 
 def saved_value(store, ticker: str, as_of: str, version: str, key: str) -> dict | None:
-    """A saved version's value for a model: id (no model book needed: Ask cites these)."""
     row = saved_version(store, ticker, as_of, version)
     if row is None:
         return None

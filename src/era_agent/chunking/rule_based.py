@@ -1,7 +1,3 @@
-"""Rule-based chunking (C1–C10): a new chunk at every heading, each table its own chunk, prose
-packed to TARGET tokens. Spec: experiments/V0_PARSING_CHUNKING.md §3.1.
-"""
-
 from era_agent.chunking import common
 from era_agent.chunking.common import (
     assign_ids,
@@ -15,17 +11,15 @@ from era_agent.chunking.common import (
 
 
 def rule_based(document: dict) -> list[dict]:
-    """Per subsection: each table is its own chunk; the prose around it is packed to TARGET."""
     chunks: list[dict] = []
     for section in document["sections"]:
         index = {b["id"]: i for i, b in enumerate(section["blocks"])}
         for group in subsections(section["blocks"]):
             heads = group["headings"]
-            # C5 leaves room for the heading lines every chunk starts with (C10).
             limit = max(
                 common.TARGET // 2, common.TARGET - tokens("\n".join(h["text"] for h in heads)) - 2
             )
-            prose: list[tuple[str, dict]] = []  # (paragraph text, source block), to be packed
+            prose: list[tuple[str, dict]] = []
             captioned = captions(section, group["body"])
             for b in group["body"]:
                 if b["kind"] == "table":
@@ -39,10 +33,7 @@ def rule_based(document: dict) -> list[dict]:
 
 
 def _pack(section: dict, heads: list[dict], prose: list[tuple[str, dict]]) -> list[dict]:
-    """C6: pack a subsection's paragraphs greedily up to TARGET tokens. C10: the first chunk starts
-    with all its heading lines, later ones with its own (last) heading. C7: a later chunk also
-    repeats the previous chunk's last paragraph if it's short and still fits."""
-    if not prose:  # a heading over only tables (and their captions) is already in their chunks
+    if not prose:
         return []
 
     def text(lines: list[tuple[str, dict]]) -> str:

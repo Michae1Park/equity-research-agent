@@ -82,7 +82,7 @@ def main() -> None:
         if not config["score"]["restatements"]:
             q = q | {"acceptable_sources": []}
         gold = gold_chunks(store, q)
-        if not all(gold.per_source):  # an evidence quote no chunk contains (split by chunking)
+        if not all(gold.per_source):
             unscorable.append(q["id"])
             print(f"{q['id']:<40} unscorable: evidence not found in one chunk")
             continue
@@ -142,7 +142,6 @@ def main() -> None:
 
 
 def top_score(result) -> float:
-    """The reranker's best score over the question's searches: how well anything matched."""
     return max((s for search in result.searches for _, s in search.reranked[:1]), default=0.0)
 
 

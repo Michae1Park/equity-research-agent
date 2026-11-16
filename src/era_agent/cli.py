@@ -25,7 +25,7 @@ import sys
 from datetime import date
 from pathlib import Path
 
-if sys.argv[1:2] == ["serve"]:  # the web UI runs on the V4 corpus; set before corpus loads
+if sys.argv[1:2] == ["serve"]:
     os.environ.setdefault("ERA_COMPANIES", "companies.yaml")
 
 from era_agent import config as config_file  # noqa: E402
@@ -34,8 +34,8 @@ from era_agent.corpus import COMPANIES, DATA_DIR, FISCAL_YEARS, WINDOW_START, co
 from era_agent.store import ChunkRecord, Store
 
 GOLD = Path("evaluation/gold/generation-gold-fy2025.jsonl")
-RUNS = Path("output/generation")  # where experiments/v2/run.py writes a run
-RESULTS = Path("evaluation/results")  # the reports kept with the gold sets
+RUNS = Path("output/generation")
+RESULTS = Path("evaluation/results")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -55,7 +55,6 @@ def main(argv: list[str] | None = None) -> int:
                        help="V4 corpus: prices (Tiingo), macro (FRED) and ERP only")
 
     build = commands.add_parser("build", help="V0 chunks of every filing → V1 database")
-    # build.STAGES
     stages = ("chunk", "load", "append", "embed", "pages", "facts", "market", "kpis")
     build.add_argument(
         "--stage", action="append", choices=stages, help="default: chunk, load, embed"
@@ -166,15 +165,12 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
 
-# --- fetch, build ----------------------------------------------------------------------------
-
-
 def _fetch(args: argparse.Namespace, settings: dict) -> int:
     from era_agent.acquisition import fetch
 
     user_agent = credentials.get("sec_user_agent")
     companies = [company_by_ticker(t) for t in args.tickers] if args.tickers else list(COMPANIES)
-    if FISCAL_YEARS is None and args.market:  # V4: prices, macro, ERP
+    if FISCAL_YEARS is None and args.market:
         from era_agent.acquisition import market
 
         raw = Path(DATA_DIR) / "raw"
@@ -185,7 +181,7 @@ def _fetch(args: argparse.Namespace, settings: dict) -> int:
         for problem in problems:
             print(problem, file=sys.stderr)
         return 1 if problems else 0
-    if FISCAL_YEARS is None:  # V4: every filing in the window (acquisition/filings.py)
+    if FISCAL_YEARS is None:
         from era_agent.acquisition import filings
 
         forms = tuple(args.forms or filings.FORMS)
@@ -258,7 +254,7 @@ def _companies(args: argparse.Namespace, settings: dict) -> int:
 def _build(args: argparse.Namespace, settings: dict) -> int:
     from era_agent.build import build, filing_dirs
 
-    if DATA_DIR:  # V4 corpus: its own data folder, every form
+    if DATA_DIR:
         filings = filing_dirs(Path(DATA_DIR), args.filing, "*")
         out = args.out or Path(DATA_DIR) / "build"
     else:
@@ -267,9 +263,6 @@ def _build(args: argparse.Namespace, settings: dict) -> int:
     methods = args.method or settings["build"]["methods"]
     build(filings, out, settings, methods, args.stage or ["chunk", "load", "embed"], args.jobs)
     return 0
-
-
-# --- search, ask, chat -------------------------------------------------------------------------
 
 
 def _retriever(settings: dict):
@@ -325,7 +318,7 @@ def _chat(args: argparse.Namespace, settings: dict) -> int:
         except KeyboardInterrupt:
             print("\n(interrupted)\n")
             continue
-        except Exception as e:  # a dropped server shouldn't end the session
+        except Exception as e:
             hint = f" (is {generation['model']} served at {generation['base_url']}?)"
             hint = hint if "Connection" in type(e).__name__ else ""
             print(f"\nerror: {type(e).__name__}: {e}{hint}\n")
@@ -334,7 +327,6 @@ def _chat(args: argparse.Namespace, settings: dict) -> int:
 
 
 def _answerer(args: argparse.Namespace, settings: dict):
-    """question → (Generation, chunks shown): V1's top k, then one V2 model call."""
     from era_agent.generation.generate import build_prompt, generate
     from era_agent.models import get_model
 
@@ -356,12 +348,10 @@ def _answerer(args: argparse.Namespace, settings: dict):
 
 
 def show(result, chunks: list[ChunkRecord]) -> None:
-    """The chunks shown, the answer (with its table and scope notice), each claim's status and
-    citations, and the call's time and tokens."""
     answer = result.answer
     print(f"\nChunks ({len(chunks)})")
     for i, c in enumerate(chunks, 1):
-        span = list(dict.fromkeys(map(str, c.printed_pages or c.pages or [])))  # 36-36 → 36
+        span = list(dict.fromkeys(map(str, c.printed_pages or c.pages or [])))
         pages = f" p.{'-'.join(span)}" if span else ""
         print(f"  {i:>2}. {c.id}  {c.ticker} FY{c.fiscal_year} item {c.item} {c.kind}{pages}")
     show_answer(answer)
@@ -371,7 +361,6 @@ def show(result, chunks: list[ChunkRecord]) -> None:
 
 
 def show_answer(answer: dict) -> None:
-    """The answer (with its table and scope notice), and each claim's status and citations."""
     flags = [
         f
         for f, on in (("DECLINED", answer["abstained"]), ("FORMAT ERROR", answer["format_error"]))
@@ -395,7 +384,6 @@ def show_answer(answer: dict) -> None:
 
 
 def _table(table: dict) -> str:
-    """The answer's table ({columns, rows}) as aligned text; anything else as-is."""
     columns, rows = table.get("columns"), table.get("rows")
     if not isinstance(columns, list) or not isinstance(rows, list):
         return str(table)
@@ -403,9 +391,6 @@ def _table(table: dict) -> str:
     widths = [max(len(r[i]) for r in cells if i < len(r)) for i in range(len(columns))]
     lines = ["  ".join(v.ljust(w) for v, w in zip(r, widths, strict=False)) for r in cells]
     return "\n".join([lines[0], "  ".join("-" * w for w in widths), *lines[1:]])
-
-
-# --- tool ------------------------------------------------------------------------------------
 
 
 def _tool(args: argparse.Namespace, settings: dict) -> int:
@@ -464,8 +449,6 @@ def _agent(args: argparse.Namespace, settings: dict) -> int:
 
 
 def _investigate(args: argparse.Namespace, settings: dict) -> int:
-    """Investigate mode (design doc §8.4): a plan of Ask and Research sub-runs over one shared
-    model book, one replan, and a claim-checked combined answer."""
     from dataclasses import asdict
 
     from era_agent.agent.factory import agent_factory
@@ -487,16 +470,12 @@ def _investigate(args: argparse.Namespace, settings: dict) -> int:
     return 0
 
 
-# --- gold --------------------------------------------------------------------------------------
-
-
 def _gold(args: argparse.Namespace, settings: dict) -> int:
     handlers = {"show": _gold_show, "render": _gold_render, "verify": _gold_verify}
     return handlers.get(args.gold_action, _gold_list)(args, settings)
 
 
 def _gold_list(args: argparse.Namespace, settings: dict) -> int:
-    """One line per question: verification, evidence resolution and XBRL cross-check."""
     from era_agent.evaluation import gold
 
     store = Store(Path(settings["db"]))
@@ -512,7 +491,6 @@ def _gold_list(args: argparse.Namespace, settings: dict) -> int:
 
 
 def _gold_show(args: argparse.Namespace, settings: dict) -> int:
-    """Everything a reviewer needs to verify one question against the filing."""
     from era_agent.evaluation import gold
 
     q = next((q for q in gold.load(args.gold) if q["id"] == args.id), None)
@@ -555,7 +533,6 @@ def _gold_render(args: argparse.Namespace, settings: dict) -> int:
     from era_agent.evaluation.render import render_pdf, render_summary_pdf
 
     out = args.out or args.gold.with_suffix(".pdf")
-    # V4 corpus: its own database (every form); V3: the config's
     db = Path(DATA_DIR) / "build" / "parent_child.db" if DATA_DIR else Path(settings["db"])
     store = Store(db)
     count = render_pdf(args.gold, store, Path(settings["data_dir"]), out)
@@ -578,9 +555,6 @@ def _gold_verify(args: argparse.Namespace, settings: dict) -> int:
     return 0
 
 
-# --- report ------------------------------------------------------------------------------------
-
-
 def _report(args: argparse.Namespace, settings: dict) -> int:
     import shutil
 
@@ -593,7 +567,7 @@ def _report(args: argparse.Namespace, settings: dict) -> int:
     if not (run_dir / "results.json").exists():
         print(f"No run {args.label!r} in {RUNS}/", file=sys.stderr)
         return 1
-    used = yaml.safe_load((run_dir / "config.yaml").read_text())  # the settings the run used
+    used = yaml.safe_load((run_dir / "config.yaml").read_text())
     questions = gold.load(args.gold)
     if not used["score"]["restatements"]:
         questions = [q | {"acceptable_sources": []} for q in questions]

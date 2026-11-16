@@ -1,5 +1,3 @@
-"""Valuation (research/valuation.py): DCF behaviour, ranking and determinism (layer 4)."""
-
 import pytest
 
 from era_agent.research import valuation
@@ -8,8 +6,6 @@ V = {"annual_fade": 0.9, "dcf_years": 10}
 
 
 class Model:
-    """The few things dcf() reads: forecast quarters and line values."""
-
     ticker = "TEST"
 
     def __init__(self, ufcf_per_quarter: float, growth: float = 0.1):

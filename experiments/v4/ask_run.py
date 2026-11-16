@@ -73,7 +73,6 @@ def main() -> None:
     search_lock, agents = threading.Lock(), {}
 
     def agent_at(as_of: str) -> Agent:
-        """One agent per as-of: its store, search and tools see only what was public then."""
         if as_of not in agents:
             store = Store(db, AsOf.of(as_of))
             search = replace(base, decomposer=replace(base.decomposer, store=store),
@@ -96,7 +95,7 @@ def main() -> None:
     lock = threading.Lock()
     with lock:
         for q in tasks:
-            agent_at(q["as_of"])  # build the agents before the threads share them
+            agent_at(q["as_of"])
 
     def answer(q: dict) -> None:
         try:
@@ -115,7 +114,7 @@ def main() -> None:
                 "input_tokens": sum(s.input_tokens for s in result.steps),
                 "output_tokens": sum(s.output_tokens for s in result.steps), "steps": steps,
             }
-        except Exception as e:  # one failed question shouldn't end the run; --resume retries it
+        except Exception as e:
             print(f"{q['id']:<44} FAILED {type(e).__name__}: {e}"[:300])
             return
         with lock:
@@ -130,14 +129,13 @@ def main() -> None:
 
 
 def _locked(call, lock, name, arguments):
-    if name == "search_filings":  # the embedder and reranker are shared between workers
+    if name == "search_filings":
         with lock:
             return call(name, arguments)
     return call(name, arguments)
 
 
 def seen_ids(steps) -> list[str]:
-    """Every id a tool returned: chunks, data rows, and the chunks data rows came from."""
     ids = []
     for step in steps:
         result = step.result or {}
@@ -147,7 +145,6 @@ def seen_ids(steps) -> list[str]:
 
 
 def gold_ids(store: Store, q: dict) -> list[set[str]]:
-    """Each gold source's chunks: those of its company, period and form showing its evidence."""
     out = []
     for src in q.get("sources") or []:
         fy, fp = period_parts(src["period"])

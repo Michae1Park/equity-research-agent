@@ -1,16 +1,3 @@
-"""Preprocessing step 2: the LLM structure agent, then assembly into the structured document.
-
-  label     the LLM gives every block a role (Item heading, heading, table, noise…),
-            one window of ~150 blocks per call                      Labeler
-  validate  code checks each window's labels (V1, V2, V4–V7)        validate (validation.py)
-  repair    violations go back to the LLM, for a few rounds         Labeler._label_window
-  assemble  code applies the labels to the blocks' own text (A1–A5) assemble
-
-The LLM only labels; the document's text is always the filing's own. Spec:
-experiments/V0_PARSING_CHUNKING.md §2.2–2.3; prompt and output format:
-prompts/structure.md and prompts/structure.schema.json.
-"""
-
 import json
 import re
 from collections import Counter
@@ -29,16 +16,15 @@ from era_agent.preprocess.validation import (
 )
 from era_agent.prompts import PROMPTS
 
-DROPPED_ROLES = {"cover", "toc", "part_heading", "furniture", "index_table"}  # A2
-STATEMENT_KINDS = {"statement", "notes_header", "auditor_report"}  # A3: where statements start
-PRINTED_PAGE = re.compile(r"(?<![\w-])([A-Z]-\d{1,3}|\d{1,3})\s*$")  # A5: "… | 12", "F-3"
-ITEM_PREFIX = re.compile(  # "Item 1A." / "Items 10 and 11:" before a section title
+DROPPED_ROLES = {"cover", "toc", "part_heading", "furniture", "index_table"}
+STATEMENT_KINDS = {"statement", "notes_header", "auditor_report"}
+PRINTED_PAGE = re.compile(r"(?<![\w-])([A-Z]-\d{1,3}|\d{1,3})\s*$")
+ITEM_PREFIX = re.compile(
     r"^items?\s+\d{1,2}[a-c]?(\s*(,|and|&)\s*\d{1,2}[a-c]?)*\s*[.:]?\s*", re.I
 )
 
 
 def load_prompts() -> tuple[str, str, str]:
-    """(system prompt, window template, repair template) from prompts/structure.md."""
     text = (PROMPTS / "structure.md").read_text(encoding="utf-8")
     system, templates = text.split("<!-- END SYSTEM PROMPT", 1)
     window = templates.split("## Template: window", 1)[1].split("## Template: repair", 1)[0]
@@ -46,20 +32,14 @@ def load_prompts() -> tuple[str, str, str]:
     return system.strip(), window.strip(), repair.strip()
 
 
-# ---------- labeling ----------
-
-
 @dataclass
 class Outline:
-    """Where the labels so far leave off: the open Item, the Items seen, the open heading path."""
-
-    texts: dict[str, str]  # block id → text, to show the path in the prompt
+    texts: dict[str, str]
     item: str | None = None
     items: list[str] = field(default_factory=list)
-    path: list[tuple[int, str]] = field(default_factory=list)  # (level, heading block id)
+    path: list[tuple[int, str]] = field(default_factory=list)
 
     def advance(self, label: dict) -> None:
-        """Move past one labeled block."""
         if label["role"] == "item_heading":
             self.item = label.get("item")
             if self.item in ITEMS:
@@ -77,16 +57,12 @@ class Outline:
 
 
 class Labeler:
-    """Labels a filing window by window: one schema-constrained call (temperature 0, thinking
-    off), then validate → repair. `labeling` is the config's `labeling:` (window, context,
-    repair_rounds)."""
-
     def __init__(self, model: str, base_url: str, filing: dict, labeling: dict):
         self.client = openai.OpenAI(base_url=base_url, api_key="not-needed", timeout=1800)
         self.model = model
         self.filing = filing
-        self.window = labeling["window"]  # blocks labeled per call
-        self.context = labeling["context"]  # labeled blocks from the previous window shown
+        self.window = labeling["window"]
+        self.context = labeling["context"]
         self.repair_rounds = labeling["repair_rounds"]
         self.system, self.window_template, self.repair_template = load_prompts()
         schema = json.loads((PROMPTS / "structure.schema.json").read_text())
@@ -95,10 +71,9 @@ class Labeler:
             "json_schema": {"name": "labels", "schema": schema},
         }
         self.usage = {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0}
-        self.log: list[dict] = []  # per window: its violations after each round
+        self.log: list[dict] = []
 
     def label(self, blocks: list[Block]) -> dict[str, dict]:
-        """block id → label. Blocks the repair couldn't fix are marked `unresolved`."""
         labels: dict[str, dict] = {}
         outline = Outline({b.id: b.text[:80] for b in blocks})
         for start in range(0, len(blocks), self.window):
@@ -117,7 +92,6 @@ class Labeler:
     def _label_window(
         self, window: list[Block], context: list[Block], labels: dict, outline: Outline
     ) -> tuple[dict[str, dict], list[Violation]]:
-        """The window's labels after up to `repair_rounds` repairs, and the violations left."""
         user = self.window_template.format(
             company=self.filing["registrant"],
             ticker=self.filing["ticker"],
@@ -134,7 +108,6 @@ class Labeler:
         for _ in range(self.repair_rounds):
             if not violations:
                 break
-            # Show the LLM its own reply, the violations and the flagged blocks with their labels.
             flagged = {i for v in violations for i in v.ids}
             lines = [
                 f"{_input_line(b)}\n    your label: {json.dumps(got.get(b.id))}"
@@ -170,11 +143,10 @@ class Labeler:
         try:
             return json.loads(r.choices[0].message.content)
         except json.JSONDecodeError:
-            return {"labels": []}  # every block then fails V1 and goes to repair
+            return {"labels": []}
 
 
 def _input_line(b: Block) -> str:
-    """How the LLM sees a block: `id | features | text`, long text and tables shortened."""
     if b.kind == "table":
         rows = b.rows if len(b.rows) <= 6 else b.rows[:3] + b.rows[-1:]
         return (
@@ -187,7 +159,6 @@ def _input_line(b: Block) -> str:
 
 
 def _context_line(b: Block, label: dict) -> str:
-    """An already-labeled block from the previous window, shown with its label."""
     extra = " ".join(f"{k}={label[k]}" for k in ("item", "level", "kind") if k in label)
     return f"{b.id} | {label['role']} {extra} | {b.text[:100]}"
 
@@ -196,14 +167,9 @@ def _by_id(reply: dict) -> dict[str, dict]:
     return {lb["id"]: lb for lb in reply.get("labels", []) if isinstance(lb, dict) and "id" in lb}
 
 
-# ---------- validation ----------
-
-
 def validate(window: list[Block], got: dict[str, dict], outline: Outline) -> list[Violation]:
-    """V1, V2, V4–V7 (§2.2, validation.py) on one window's labels. V3 (every required Item present)
-    needs a full filing, so it isn't checked here."""
     out = missing_labels(window, got)
-    outline = outline.copy()  # walk the window without moving the caller's outline
+    outline = outline.copy()
     previous: dict = {}
     for b in window:
         label = got.get(b.id)
@@ -217,12 +183,7 @@ def validate(window: list[Block], got: dict[str, dict], outline: Outline) -> lis
     return out
 
 
-# ---------- assembly ----------
-
-
 def assemble(blocks: list[Block], labels: dict[str, dict], filing: dict) -> dict:
-    """The structured document (§2.3) from blocks + labels: sections, run-in splits and layout
-    rows (A1–A2), statements moved into Item 8 (A3), heading paths (A4), printed pages (A5)."""
     printed = _printed_pages(blocks, labels)
     sections: list[dict] = []
     dropped: Counter[str] = Counter()
@@ -232,11 +193,11 @@ def assemble(blocks: list[Block], labels: dict[str, dict], filing: dict) -> dict
         role = label["role"]
         if label.get("uncertain") or label.get("unresolved"):
             review.append(b.id)
-        if role == "item_heading":  # A2: each Item heading opens a section
-            text = " ".join(b.rows[0]) if b.kind == "table" else b.text  # | Item 1. | Business |
+        if role == "item_heading":
+            text = " ".join(b.rows[0]) if b.kind == "table" else b.text
             title = ITEM_PREFIX.sub("", text) or text
             sections.append({"item": label.get("item"), "title": title, "blocks": []})
-        elif not sections:  # everything before the first Item is the cover
+        elif not sections:
             dropped["cover"] += 1
         elif role in DROPPED_ROLES:
             dropped[role] += 1
@@ -249,7 +210,6 @@ def assemble(blocks: list[Block], labels: dict[str, dict], filing: dict) -> dict
 
 
 def _printed_pages(blocks: list[Block], labels: dict[str, dict]) -> dict[int, str]:
-    """A5: page → the page number printed in its furniture (footer or header), if any."""
     printed: dict[int, str] = {}
     for b in blocks:
         if labels[b.id]["role"] == "furniture" and (m := PRINTED_PAGE.search(b.text)):
@@ -258,10 +218,8 @@ def _printed_pages(blocks: list[Block], labels: dict[str, dict]) -> dict[int, st
 
 
 def _document_blocks(b: Block, label: dict) -> list[dict]:
-    """The document block(s) one labeled block becomes."""
     role = label["role"]
     if role == "heading" and label.get("run_in") and b.emph == "runin":
-        # A1: the emphasized lead is the heading, the rest a paragraph.
         return [
             _heading(f"{b.id}.h", b.text[: b.runin], label, b),
             _paragraph(f"{b.id}.b", b.text[b.runin :].strip(), b),
@@ -281,7 +239,6 @@ def _document_blocks(b: Block, label: dict) -> list[dict]:
             }
         ]
     if role == "layout_table":
-        # A2: each row becomes a heading or a paragraph; furniture rows are dropped.
         row_labels = label.get("rows") or [{"role": "body"}] * len(b.rows)
         out = []
         for k, (row, row_label) in enumerate(zip(b.rows, row_labels, strict=False)):
@@ -309,8 +266,6 @@ def _paragraph(id_: str, text: str, b: Block) -> dict:
 
 
 def _move_statements_into_item8(sections: list[dict]) -> None:
-    """A3: if Item 8 has no statement, move the span from the first statement / notes / auditor
-    heading after it, up to the end of that section, into Item 8 (NVIDIA, Netflix: Item 15)."""
     item8 = next((s for s in sections if s["item"] == "8"), None)
     if item8 is None or any(b.get("heading_kind") == "statement" for b in item8["blocks"]):
         return
@@ -323,8 +278,6 @@ def _move_statements_into_item8(sections: list[dict]) -> None:
 
 
 def _add_heading_paths(sections: list[dict]) -> None:
-    """A4: every block's heading_path, the headings above it (a heading includes itself).
-    Levels that jump by more than one are clamped."""
     for section in sections:
         path: list[str] = []
         for b in section["blocks"]:

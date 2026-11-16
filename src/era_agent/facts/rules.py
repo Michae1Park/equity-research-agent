@@ -1,13 +1,3 @@
-"""Rules-based KPI extraction (design doc §12.2 ablation: `extract.method: rules`).
-
-A label-pattern table-row matcher over the registry, no LLM: for each KPI label (kpis.yaml), the
-first release table row whose first cell starts with it; the reported quarter's column is the
-later of a growth pair (extract.growth_pair), else the row's first number. A KPI whose labels
-map one to one onto its segments (TRIP's revenue) gets a row per segment; otherwise only the
-consolidated value ("total"). Guidance is prose and is not attempted. Rows then pass the same
-validation as the LLM's (extract.validate), so they are compared on equal terms.
-"""
-
 import re
 
 from era_agent.facts.extract import (

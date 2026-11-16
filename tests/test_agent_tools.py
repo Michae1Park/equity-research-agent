@@ -1,5 +1,3 @@
-"""The V3 agent's tools, offline: corpus reads, the calculator, and cached SEC data."""
-
 import json
 
 import pytest
@@ -151,8 +149,6 @@ def test_text_tool_set_hides_sec_tools(tools):
     assert [s.name for s in tools.specs] == ["search_filings", "calculator"]
     assert "unknown tool" in tools.call("xbrl_facts", {})["error"]
 
-
-# --- Claim check with XBRL citations (verify.py) ------------------------------------
 
 FACT = f"xbrl:AAPL:us-gaap:ResearchAndDevelopmentExpense:{ACCESSION}:2025-09-27"
 PRIOR = f"xbrl:AAPL:us-gaap:ResearchAndDevelopmentExpense:{ACCESSION}:2024-09-28"
@@ -379,10 +375,10 @@ def test_research_report_returns_a_saved_version_made_before_the_asof(tmp_path):
     assert result["valuation"]["rating"]["text"] == "Buy"
     rows = {(r["line"], r["period"]): r for r in result["estimates"]}
     assert rows[("revenue", "FY2027")]["value"] == 520000.0
-    assert rows[("adj_ebitda_margin", "FY2027")]["value"] == 25.0  # ratios in percent
+    assert rows[("adj_ebitda_margin", "FY2027")]["value"] == 25.0
     ref = rows[("revenue", "FY2027")]["id"]
     assert ref == "model:AAPL:2026-08-06:v1:revenue.FY2027"
-    resolver = Resolver(store)  # no model book: Ask's claim check resolves saved versions
+    resolver = Resolver(store)
     assert resolver.resolve(ref).values[0]["value"] == 520000.0
     assert resolver.resolve("model:AAPL:2026-08-06:v1:price_target").values[0]["value"] == 240
-    assert Resolver(same_day.store).resolve(ref) is None  # not yet saved at that as-of
+    assert Resolver(same_day.store).resolve(ref) is None

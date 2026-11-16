@@ -1,12 +1,3 @@
-"""Layer 1, extraction (V4 design doc §12.2): extracted KPIs and guidance against hand labels.
-
-A gold label (evaluation/gold/extraction-gold.jsonl) matches when the extraction has a row for
-its (ticker, period, metric, segment) — guidance labels `guide.<metric>.low|high` match the
-guidance row for that metric and target period — with the same value to the label's precision
-(USD millions to 0.5; per share to half a cent; percent and counts exactly as printed). Pass
-bars: 98% overall, 100% on consolidated revenue, EPS and the company's main KPI.
-"""
-
 import json
 import re
 from pathlib import Path
@@ -25,7 +16,6 @@ CRITICAL = ("revenue", "eps_diluted")
 
 
 def _quarter(target: str | None) -> str | None:
-    """'Q3 2026' or '2026Q3' → '2026Q3'; 'FY 2026', 'full-year 2026' or '2026' → 'FY2026'."""
     if not target:
         return None
     t = target.replace(" ", "")
@@ -40,7 +30,6 @@ def _close(a: float, b: float, unit: str) -> bool:
 
 
 def score(gold: list[dict], extracted: dict[tuple[str, str], dict]) -> dict:
-    """`extracted`: (ticker, period) → Extraction as JSON (facts/extract.to_json)."""
     rows = []
     for label in gold:
         got = extracted.get((label["ticker"], label["period"]))

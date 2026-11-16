@@ -50,8 +50,8 @@ def test_find_value_normalizes_units():
     assert find_value(31370, "USD millions", table) == "31,370"
     assert find_value(31.37, "USD billions", table) == "31,370"
     assert find_value(31370000000, "USD", table) == "31,370"
-    assert find_value(31.4, "USD billions", table) == "31,370"  # rounded claim, written precision
-    assert find_value(31500, "USD millions", table) is None  # close, but a different figure
+    assert find_value(31.4, "USD billions", table) == "31,370"
+    assert find_value(31500, "USD millions", table) is None
     assert find_value(29916, "USD millions", table) is None
 
 

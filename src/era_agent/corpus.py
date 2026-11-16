@@ -1,10 +1,3 @@
-"""The corpus: companies and fiscal years from a companies file.
-
-$ERA_COMPANIES names the file, default companies-v3.yaml: the V0–V3 corpus,
-8 companies × fiscal years 2023–2025. companies.yaml is the V4 coverage. A relative
-path is read from the working directory, else the repo root.
-"""
-
 import os
 import re
 from dataclasses import dataclass
@@ -31,7 +24,6 @@ def companies_path(name: str | None = None) -> Path:
 
 
 def load(path: Path) -> tuple[tuple[Company, ...], tuple[int, ...] | None]:
-    """The companies in `path` and its fiscal years (None: every period up to the as-of)."""
     data = yaml.safe_load(path.read_text())
     companies = tuple(
         Company(ticker, entry["cik"], entry["name"], tuple(entry.get("aliases", ())))
@@ -43,7 +35,7 @@ def load(path: Path) -> tuple[tuple[Company, ...], tuple[int, ...] | None]:
 
 COMPANIES, FISCAL_YEARS = load(companies_path())
 _FILE = yaml.safe_load(companies_path().read_text())
-DATA_DIR: str | None = _FILE.get("data_dir")  # None: config.yaml's data_dir (V3)
+DATA_DIR: str | None = _FILE.get("data_dir")
 WINDOW_START: str = str(_FILE.get("window", {}).get("since", "2023-01-01"))
 
 
@@ -59,7 +51,6 @@ def _key(name: str) -> str:
 
 
 def resolve_company(name: str) -> Company | None:
-    """A ticker, legal name or alias ("Google", "Facebook") -> corpus company; None if absent."""
     key = _key(name)
     for company in COMPANIES:
         names = (company.ticker, company.name, *company.aliases)

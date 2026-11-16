@@ -1,17 +1,3 @@
-"""V3: the agent loop, as a LangGraph graph. Spec: docs/stages/V3_AGENT.md.
-
-  question ─► model ──tool calls──► tools ─► model ─► … ─► JSON answer (as in V2)
-                 └── no tool calls: parse the JSON answer (one "only the JSON" retry)
-
-The model decides every step: which tool, with what arguments, and when to answer. The graph
-only makes the first turn a tool call (so no answer comes from memory), turns a repeated call
-into an error, and enforces the budget: calls past `max_calls` return an error, and after the
-budget (or once the conversation reaches `max_context` tokens) the model gets one turn with
-tools off to answer. Tool results are cut to the context left, so one large result cannot push
-that turn past the model's window. The answer goes through V2's
-finalize, so the claim check is the same, now also over XBRL facts (verify.py).
-"""
-
 import json
 import time
 from dataclasses import dataclass, field
@@ -27,8 +13,8 @@ from era_agent.models import Model, parse_json
 from era_agent.prompts import PROMPTS
 
 PROMPT = PROMPTS / "agent.md"
-ASK_PROMPT = PROMPTS / "ask.md"  # V4 tool set "ask"
-RESEARCH_PROMPT = PROMPTS / "research.md"  # V4 tool set "research"
+ASK_PROMPT = PROMPTS / "ask.md"
+RESEARCH_PROMPT = PROMPTS / "research.md"
 SEC_GUIDANCE = (
     "- xbrl_facts gives a figure as the company tagged it in XBRL; cite its xbrl_id. Prefer "
     "it for standard line items (revenue, net income, R&D), and the 10-K text (search_filings) "
@@ -40,31 +26,29 @@ ANSWER_NOW = "Tool budget used up. Answer now with the JSON object from what you
 JSON_ONLY = "Reply again with only the JSON object."
 REPEATED = "You already made this exact call; its result is above. Use it, or answer."
 CONTEXT_FULL = " …(cut: the context is full; answer from what you have)"
-CHARS_PER_TOKEN = 3  # a low estimate for JSON tool results, so the room is not overestimated
-MIN_RESULT = 400  # characters a result keeps even when the room is gone (its ids, an error)
+CHARS_PER_TOKEN = 3
+MIN_RESULT_CHARS = 400
 
 
 @dataclass
 class Step:
-    """One model turn or tool call, for the trace."""
-
-    kind: str  # "model" or "tool"
+    kind: str
     seconds: float
-    name: str = ""  # tool name
+    name: str = ""
     arguments: dict | None = None
     result: dict | None = None
-    text: str = ""  # model turn: its visible text
+    text: str = ""
     input_tokens: int = 0
     output_tokens: int = 0
 
 
 @dataclass
 class Run:
-    answer: dict  # finalize(): answer, claims (with status), table, scope_notice, abstained, …
+    answer: dict
     steps: list[Step] = field(default_factory=list)
     seconds: float = 0.0
-    stop: str = ""  # "answered", "budget", "turns"
-    reply: str = ""  # the last model text, unparsed (sub-agents return their own JSON)
+    stop: str = ""
+    reply: str = ""
 
     @property
     def tool_calls(self) -> list[Step]:
@@ -74,10 +58,10 @@ class Run:
 class State(TypedDict):
     messages: list[dict]
     steps: list[Step]
-    calls: int  # tool calls made
-    turns: int  # model turns
-    retried: bool  # the "only the JSON" retry was used
-    reply: str  # the last model text
+    calls: int
+    turns: int
+    retried: bool
+    reply: str
     stop: str
 
 
@@ -101,8 +85,6 @@ def build_system(toolbox: Toolbox, max_calls: int, prompt=PROMPT) -> str:
 
 
 def coverage_table(store) -> str:
-    """The Ask prompt's {coverage}: per company, the latest filing of each form visible at the
-    store's AsOf, and how far back the corpus goes."""
     lines = ["Coverage (latest period of each form filed before today; earliest period):"]
     by_company: dict[str, list] = {}
     names = {}
@@ -122,8 +104,6 @@ def coverage_table(store) -> str:
 
 
 def context_cap(model, max_context: int, max_tokens: int) -> int:
-    """max_context, never past the server's window: its length less the output budget and a
-    1/8 margin (200k → 171k, 32k → 24.6k)."""
     window = getattr(model, "context_window", lambda: None)()
     return min(max_context, window - max_tokens - window // 8) if window else max_context
 
@@ -133,10 +113,10 @@ class Agent:
     model: Model
     toolbox: Toolbox
     max_calls: int = 12
-    max_turns: int = 20  # model turns, a guard against loops of failed calls
+    max_turns: int = 20
     max_tokens: int = 4000
-    result_chars: int = 16000  # a tool result is cut to this many characters
-    max_context: int = 20000  # input tokens past which the next turn must answer (tools off)
+    result_chars: int = 16000
+    max_context: int = 20000
     prompt: Path = PROMPT
 
     def __post_init__(self):
@@ -153,7 +133,6 @@ class Agent:
         self.graph = graph.compile()
 
     def run(self, question: str, history: list[dict] | None = None) -> Run:
-        """history: earlier chat turns as messages (agent.history.as_messages), oldest first."""
         start = time.perf_counter()
         state = self.graph.invoke(
             {
@@ -173,11 +152,8 @@ class Agent:
         return Run(answer, state["steps"], round(time.perf_counter() - start, 3), state["stop"],
                    state["reply"])
 
-    # --- Nodes ---------------------------------------------------------------------------
 
     def _used(self, state: State) -> int:
-        """Tokens the next turn's input will hold: the last turn's input and output, plus an
-        estimate for the messages added since (tool results)."""
         last = next((s for s in reversed(state["steps"]) if s.kind == "model"), None)
         if last is None:
             return 0
@@ -195,7 +171,7 @@ class Agent:
             or self._used(state) >= self.max_context
         )
         messages = state["messages"]
-        if over and messages[-1]["role"] != "user":  # say why the tools are gone
+        if over and messages[-1]["role"] != "user":
             messages = messages + [{"role": "user", "content": ANSWER_NOW}]
         started = time.perf_counter()
         response = self.model.complete(
@@ -222,7 +198,6 @@ class Agent:
         }
         if response.tool_calls and not over:
             return update
-        # An answer turn: if it isn't the answer object, ask once more for only the JSON.
         if parse_answer(response.text).get("format_error"):
             if not state["retried"]:
                 retry = {"role": "user", "content": JSON_ONLY}
@@ -238,8 +213,6 @@ class Agent:
     def _tools(self, state: State) -> dict:
         messages, steps, calls = list(state["messages"]), list(state["steps"]), state["calls"]
         made = {_key(s.name, s.arguments) for s in steps if s.kind == "tool"}
-        # Results share the context left: one large result must not push the next turn past
-        # the model's window (the forced answer turn still sends every message).
         room = (self.max_context - self._used(state)) * CHARS_PER_TOKEN
         for call in messages[-1]["tool_calls"]:
             started = time.perf_counter()
@@ -263,7 +236,7 @@ class Agent:
                 )
             )
             content = json.dumps(result, ensure_ascii=False)
-            fit = max(room, MIN_RESULT)
+            fit = max(room, MIN_RESULT_CHARS)
             if len(content) > min(self.result_chars, fit):
                 note = CONTEXT_FULL if fit < self.result_chars else " …(cut; narrow the call)"
                 content = content[: min(self.result_chars, fit)] + note
@@ -273,9 +246,6 @@ class Agent:
 
 
 def parse_answer(text: str) -> dict:
-    """The answer object in a reply, or unparsed() when there is none: no JSON, a JSON value
-    without an "answer" (a bare claims list), or tool-call markup written as text (which
-    holds JSON arguments)."""
     if "<tool_call>" not in text:
         try:
             raw = parse_json(text)
@@ -297,7 +267,6 @@ def agent_from_settings(
     live: bool = False,
     model: str | None = None,
 ) -> Agent:
-    """The agent as the config sets it: `generation:` for the model, `agent:` for the rest."""
     from era_agent.agent.tools import toolbox_from_settings
     from era_agent.models import get_model
 

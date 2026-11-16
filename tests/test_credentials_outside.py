@@ -1,5 +1,3 @@
-"""Credentials (missing → explicit error) and outside forecast inputs (research/outside.py)."""
-
 import pytest
 
 from era_agent import cli, credentials
@@ -8,7 +6,7 @@ from era_agent.research import outside
 
 @pytest.fixture
 def no_creds(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)  # no .env, no credentials.yaml
+    monkeypatch.chdir(tmp_path)
     for env, _, _ in credentials.CREDENTIALS.values():
         monkeypatch.delenv(env, raising=False)
     monkeypatch.setenv("ERA_CREDENTIALS", str(tmp_path / "credentials.yaml"))

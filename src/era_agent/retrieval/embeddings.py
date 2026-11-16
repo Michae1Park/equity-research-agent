@@ -1,9 +1,3 @@
-"""Text embeddings and reranking behind small interfaces, so models can be swapped per eval run.
-
-Specs look like "local:BAAI/bge-base-en-v1.5" or "voyage:voyage-3.5" (see config.py).
-Local models need the optional `local` extra (sentence-transformers).
-"""
-
 import logging
 import os
 import subprocess
@@ -15,9 +9,8 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
-GPU_FREE_MB = 6144  # default for retrieval.gpu_free_mb (embedder + reranker: 3–6 GB)
+GPU_FREE_MB = 6144
 
-# bge models retrieve better when queries (not documents) carry this instruction.
 BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
 
 
@@ -42,7 +35,6 @@ class LocalEmbedder:
         self.name = f"local:{model}"
         self._model = SentenceTransformer(model, device=device)
         self._query_prefix = BGE_QUERY_PREFIX if "bge" in model.lower() else ""
-        # Models that ship a named query prompt (e.g. Qwen3-Embedding) use it instead.
         self._prompt_name = "query" if "query" in (self._model.prompts or {}) else None
 
     def embed_documents(self, texts: list[str]) -> np.ndarray:
@@ -109,8 +101,6 @@ class LocalReranker:
 
 
 class HostedReranker:
-    """Cohere and Voyage share the same request/response shape for reranking."""
-
     URLS = {
         "cohere": ("https://api.cohere.com/v2/rerank", "COHERE_API_KEY"),
         "voyage": ("https://api.voyageai.com/v1/rerank", "VOYAGE_API_KEY"),
@@ -138,8 +128,6 @@ class HostedReranker:
 
 
 def pick_device(device: str | None, gpu_free_mb: int = GPU_FREE_MB) -> str | None:
-    """`device` as given; None → "cuda" when the GPU has `gpu_free_mb` MiB free, else "cpu".
-    Read with nvidia-smi, so choosing doesn't itself take GPU memory (a CUDA context)."""
     if device:
         return device
     try:
@@ -160,7 +148,6 @@ def pick_device(device: str | None, gpu_free_mb: int = GPU_FREE_MB) -> str | Non
 
 @cache
 def get_embedder(spec: str, device: str | None = None, gpu_free_mb: int = GPU_FREE_MB) -> Embedder:
-    """`device` (e.g. "cpu"); None picks the GPU only when it has room (pick_device)."""
     provider, _, model = spec.partition(":")
     if provider == "local":
         return LocalEmbedder(model, pick_device(device, gpu_free_mb))

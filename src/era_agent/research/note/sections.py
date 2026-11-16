@@ -1,12 +1,3 @@
-"""The note's ten sections (spec §2.3), built by code from the pipeline's artifacts.
-
-Every figure is registered as a fact (research/note/facts.py) and tables print facts. Prose
-slots — the takeaways, the quality-of-quarter conclusion, each debate and the valuation's
-justification — are written by research/note/write.py from the slot's facts only, and the
-number trace checks them. Sections 1–5 are the core deliverable; 6–10 add valuation, risks,
-catalysts, sources and the review block.
-"""
-
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
@@ -27,10 +18,9 @@ NO_GUIDANCE = "No numeric guidance for the coming quarter."
 
 @dataclass
 class Slot:
-    """Prose the writer fills: its instruction and the facts it may use."""
     key: str
     instruction: str
-    facts: list[str]  # F-ids
+    facts: list[str]
     text: str = ""
 
 
@@ -38,7 +28,7 @@ class Slot:
 class Section:
     number: int
     title: str
-    blocks: list = field(default_factory=list)  # str (markdown) or Slot
+    blocks: list = field(default_factory=list)
 
 
 def fact_row(label: str, facts: list[Fact | None]) -> str:
@@ -54,7 +44,6 @@ def pct(a, b):
 
 
 def build(ctx: dict, facts: Facts) -> list[Section]:
-    """ctx: the artifacts (see research/pipeline.py `context`)."""
     model, val, ticker = ctx["model"], ctx["valuation"], ctx["ticker"]
     last = model.history[-1]
     first = model.forecast[0]
@@ -78,7 +67,6 @@ def build(ctx: dict, facts: Facts) -> list[Section]:
         source = (c.ref if c and c.ref else mref(line, period))
         return add(label or f"{period} {NAMES.get(line, line)}", v, unit, source, period)
 
-    # 1 -----------------------------------------------------------------------------------
     s1 = Section(1, TITLES[0])
     price = add("Price", val["price"], "USD", val["refs"]["price"])
     pt = add("12-month price target", val["price_target"], "USD",
@@ -113,7 +101,6 @@ def build(ctx: dict, facts: Facts) -> list[Section]:
     takeaway_facts = [price.id, pt.id, ret.id, rating.id]
     sections.append(s1)
 
-    # 2 -----------------------------------------------------------------------------------
     s2 = Section(2, TITLES[1])
     prior = ctx.get("prior_model")
     rows, beat_facts = [], []
@@ -148,8 +135,8 @@ def build(ctx: dict, facts: Facts) -> list[Section]:
     s2.blocks.append(f"2.2 Guidance for {first}")
     grows = []
     for a in ctx["anchors"]:
-        period = a.target_period  # the coming quarter, or its fiscal year (a full-year guide)
-        ratio = model.line(a.line).unit == "fraction"  # a margin guide: percent, var in points
+        period = a.target_period
+        ratio = model.line(a.line).unit == "fraction"
         mid = add(f"{period} {a.guide} guidance midpoint", a.target * 100 if ratio else a.target,
                   "percent" if ratio else model.line(a.line).unit, a.guide_id, period)
         ours = cell(a.line, period, f"{period} {NAMES.get(a.line, a.line)} our forecast")
@@ -184,17 +171,15 @@ def build(ctx: dict, facts: Facts) -> list[Section]:
     sections.append(s2)
     takeaway_facts += beat_facts[:12]
 
-    # 3 -----------------------------------------------------------------------------------
     s3 = Section(3, TITLES[2])
     for i, d in enumerate(ctx["debates"], 1):
         evidence = [add(f"evidence {e['id']}", e["value"], e["unit"], e["id"], e.get("period", ""))
                     for e in d.get("evidence_values", [])]
         driver = d.get("driver")
-        if driver in model.assumptions:  # the debated assumption, as the model holds it
+        if driver in model.assumptions:
             evidence.append(add(f"assumption {driver}", model.assumptions[driver] * 100,
                                 "percent", f"model:{ticker}:{model.as_of}:base (assumption)"))
         question = d["question"]
-        # the sub-agent wrote the question: a number in it must trace like any prose figure
         if trace.check(question, Facts([f for f in evidence if f]), f"debate-{i} question"):
             ctx["exceptions"].append({"severity": "warning", "item": "dropped debate question "
                                       f"with an untraced number in section 3 (debate-{i})"})
@@ -208,7 +193,6 @@ def build(ctx: dict, facts: Facts) -> list[Section]:
         s3.blocks.append("No debates were run (Report steps S9).")
     sections.append(s3)
 
-    # 4 -----------------------------------------------------------------------------------
     s4 = Section(4, TITLES[3])
     revisions = ctx.get("revisions") or []
     if revisions:
@@ -226,7 +210,6 @@ def build(ctx: dict, facts: Facts) -> list[Section]:
     s4.blocks.append(" · ".join(f"[{c['status']}] {c['name']}" for c in ctx["checks"]))
     sections.append(s4)
 
-    # 5 -----------------------------------------------------------------------------------
     s5 = Section(5, TITLES[4])
     years = [y for y in (f"FY{year - 2}", f"FY{year - 1}", f"FY{year}", f"FY{year + 1}")
              if y in model.columns]
@@ -242,10 +225,9 @@ def build(ctx: dict, facts: Facts) -> list[Section]:
     s5.blocks.append("Quarterly detail, segments and the assumption register: workbook.")
     sections.append(s5)
 
-    # 6 -----------------------------------------------------------------------------------
     s6 = Section(6, TITLES[5])
     peers = val["peer_multiples"]
-    ty = f"{val.get('target_year', year + 1)}E"  # "2027E"; older files lack the field
+    ty = f"{val.get('target_year', year + 1)}E"
     prow = [add(f"{t} {ty} EV/EBITDA", m, "x", f"model:{t}:{model.as_of}:val-base:ev_to_ebitda")
             for t, m in sorted(peers["peers"].items())]
     med = add(f"Peer median {ty} EV/EBITDA", peers["median"], "x", "computed")
@@ -279,7 +261,6 @@ def build(ctx: dict, facts: Facts) -> list[Section]:
                           val_facts + [f.id for f in prow if f]))
     sections.append(s6)
 
-    # 7 -----------------------------------------------------------------------------------
     s7 = Section(7, TITLES[6])
     rows7 = []
     for r in ctx["sensitivities"]:
@@ -293,14 +274,12 @@ def build(ctx: dict, facts: Facts) -> list[Section]:
     s7.blocks.append("Probabilities beyond the scenario weights in section 6 are not assigned.")
     sections.append(s7)
 
-    # 8 -----------------------------------------------------------------------------------
     s8 = Section(8, TITLES[7])
     s8.blocks.append(f"{nxt}: next earnings (estimated from the last release date; not "
                      "announced). Watch the guided lines in section 2.2.")
     for e in ctx["events"]:
         if e.get("type") in ("catalyst", "regulation", "m&a"):
             summary = e["summary"]
-            # the events sub-agent wrote the summary: its numbers must trace like any prose
             if trace.check(summary, facts, "section 8 event"):
                 ctx["exceptions"].append({"severity": "warning", "item": "dropped event summary "
                                           "with an untraced number in section 8"})
@@ -308,7 +287,6 @@ def build(ctx: dict, facts: Facts) -> list[Section]:
             s8.blocks.append(f"- {summary} ({', '.join(e['evidence'])})")
     sections.append(s8)
 
-    # 9 -----------------------------------------------------------------------------------
     s9 = Section(9, TITLES[8])
     s9.blocks.append(f"Data as of {model.as_of}: " + "; ".join(ctx["sources"]))
     register = []
@@ -337,7 +315,6 @@ def build(ctx: dict, facts: Facts) -> list[Section]:
                      f"{sell.text()}, Hold between.")
     sections.append(s9)
 
-    # 10 ----------------------------------------------------------------------------------
     s10 = Section(10, TITLES[9], review_blocks(ctx["exceptions"]))
     sections.append(s10)
 
@@ -354,8 +331,6 @@ DRIVERS = {"gb_g": "gross bookings growth", "take_rate": "take rate", "volume_g"
 
 
 def driver_label(driver: str | None) -> str:
-    """A scenario driver's assumption name in words: gb_g_mobility.g0 → Mobility gross
-    bookings growth."""
     name = (driver or "the driver").split(".")[0]
     for key, words in sorted(DRIVERS.items(), key=lambda kv: -len(kv[0])):
         if name == key:
@@ -366,8 +341,6 @@ def driver_label(driver: str | None) -> str:
 
 
 def exceptions_line(exceptions: list[dict]) -> str:
-    """Section 9's count of the exception log by severity; rewritten at export, once the log
-    is final (like section 10)."""
     counts = {sev: sum(x["severity"] == sev for x in exceptions)
               for sev in ("error", "warning", "info")}
     by = ", ".join(f"{n} {sev}" for sev, n in counts.items() if n)
@@ -376,9 +349,6 @@ def exceptions_line(exceptions: list[dict]) -> str:
 
 
 def review_blocks(exceptions: list[dict]) -> list[str]:
-    """Section 10 (spec §2.3 requirement 4), written last: the decisions and every open issue
-    (warnings and errors) by its X-id; the rows themselves are in the exception log. Before
-    the log is numbered (`id` missing) it lists the issue count only."""
     open_ = [x for x in exceptions if x["severity"] in ("warning", "error")]
     ids = [x["id"] for x in open_ if "id" in x]
     issues = (f"Resolve open issues {', '.join(ids)} (exception log)." if ids else

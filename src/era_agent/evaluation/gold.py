@@ -1,9 +1,3 @@
-"""Gold question sets: loading and review, evidence-to-chunk resolution, XBRL cross-checks.
-
-The sets are JSONL, one question per line (evaluation/gold);
-format and rules: docs/stages/V1_RETRIEVAL.md (Gold questions).
-"""
-
 import json
 import re
 from dataclasses import dataclass
@@ -14,7 +8,7 @@ from pathlib import Path
 from era_agent.corpus import COMPANIES, FISCAL_YEARS
 from era_agent.store import Store
 
-CATEGORIES = (  # in the order the review PDFs group them
+CATEGORIES = (
     "retrieval",
     "grounding",
     "multi_document",
@@ -50,7 +44,6 @@ def load(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
-# Field order in the file, matching the record format in the authoring guide.
 FIELD_ORDER = (
     "id",
     "split",
@@ -79,7 +72,6 @@ def save(questions: list[dict], path: Path) -> None:
 
 
 def mark_verified(questions: list[dict], ids: list[str], by: str, on: date) -> list[str]:
-    """Record a reviewer's sign-off on the given questions; returns IDs that don't exist."""
     by_id = {q["id"]: q for q in questions}
     for qid in ids:
         if qid in by_id:
@@ -93,7 +85,6 @@ def is_verified(question: dict) -> bool:
 
 
 def validate(questions: list[dict]) -> list[str]:
-    """Structural problems, one message each; empty when the dataset is well formed."""
     problems = []
     seen = set()
     for q in questions:
@@ -139,7 +130,6 @@ def _validate_one(q: dict) -> list[str]:
 
 
 def expected_values(q: dict) -> list[dict]:
-    """Numeric expected answers as a list (a number answer becomes a one-item list)."""
     answer = q.get("expected_answer")
     if q.get("answer_type") == "number" and answer:
         return [answer]
@@ -149,12 +139,10 @@ def expected_values(q: dict) -> list[dict]:
 
 
 def normalize(text: str) -> str:
-    """Comparison form for evidence: case, whitespace, '$' and table pipes don't matter."""
     return re.sub(r"[\s|$]+", " ", text).strip().lower()
 
 
 def resolve_evidence(store: Store, q: dict) -> list[list[str]]:
-    """For each source (primary, then acceptable), the IDs of chunks containing its evidence."""
     resolved = []
     for source in q.get("sources", []) + q.get("acceptable_sources", []):
         evidence = normalize(source.get("evidence") or "")
@@ -167,8 +155,6 @@ def resolve_evidence(store: Store, q: dict) -> list[list[str]]:
 
 
 def source_chunks(store: Store, source: dict) -> list:
-    """The chunks a source can quote: its 10-K's (V3: fiscal_year), or those of its period and
-    form (V4 sets: period, form)."""
     if "period" not in source:
         return store.chunks(source["company"], source["fiscal_year"])
     from era_agent.store import period_parts
@@ -182,21 +168,16 @@ def source_chunks(store: Store, source: dict) -> list:
 class XbrlCheck:
     value: float
     unit: str
-    matched_concept: str | None  # None when no XBRL fact has this value for the period
+    matched_concept: str | None
 
 
 def xbrl_checks(q: dict, data_dir: Path) -> list[XbrlCheck]:
-    """Look for an XBRL fact equal to each USD expected value, for that company's fiscal year.
-
-    A match is strong evidence the gold value is transcribed correctly; a miss means the
-    value needs a closer look (it may be a non-standard line item, which is fine).
-    """
     checks = []
     for value in expected_values(q):
         scale = UNIT_SCALE.get(value.get("unit"))
         source = _source_for(q, value)
         if scale is None or source is None or "fiscal_year" not in source:
-            continue  # V4 sets: values come from labels already checked against XBRL
+            continue
         facts = _annual_usd_facts(data_dir, source["company"])
         period_end = _period_end(data_dir, source["company"], source["fiscal_year"])
         target = value["value"] * scale
@@ -214,7 +195,6 @@ def xbrl_checks(q: dict, data_dir: Path) -> list[XbrlCheck]:
 
 
 def _source_for(q: dict, value: dict) -> dict | None:
-    """The first source matching the company and fiscal year a value names (if it names them)."""
     company, year = value.get("company"), value.get("fiscal_year")
     for source in q.get("sources", []):
         if company in (None, source["company"]) and year in (None, source.get("fiscal_year")):
@@ -224,7 +204,6 @@ def _source_for(q: dict, value: dict) -> dict | None:
 
 @cache
 def _annual_usd_facts(data_dir: Path, ticker: str) -> list[tuple[str, str, float]]:
-    """(concept, period end, value) for every annual or point-in-time USD fact in a 10-K."""
     facts = json.loads((data_dir / "raw" / "edgar" / ticker / "companyfacts.json").read_text())
     return [
         (f"{taxonomy}:{name}", fact["end"], fact["val"])

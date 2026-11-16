@@ -1,6 +1,3 @@
-"""The public repo holds no credentials, downloaded data, run outputs or third-party market data:
-Tiingo prices, FRED and Damodaran values and anything derived from them stay local."""
-
 import re
 import subprocess
 from pathlib import Path
@@ -31,7 +28,6 @@ def test_example_note_is_redacted():
 
 
 def test_no_price_ids_with_values_in_docs():
-    """An evidence row citing a price, macro or ERP id never shows its value in a tracked doc."""
     pattern = re.compile(r"\| [^|]*\d[^|]* \| (px:[A-Z]+:\d{4}|macro:[A-Z0-9]+:\d{4}|erp:)")
     for path in tracked():
         if path.endswith(".md"):

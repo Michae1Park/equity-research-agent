@@ -1,12 +1,3 @@
-"""The calculator: reruns the calculation a model wrote into a claim, so a calculated number
-is checked, not trusted (verify.py). In V2 the model does the arithmetic itself; the V3 agent calls
-this as its `calculator` tool.
-
-Either a named operation (pct_change, cagr, ratio, percent_of, sum, difference) or an
-arithmetic expression over named inputs, e.g. "(new - old) / old * 100". Every result
-comes back with the formula and inputs shown, so a calculated claim can be re-checked.
-"""
-
 import ast
 import math
 import operator

@@ -1,17 +1,3 @@
-"""Draft the Investigate gold set (evaluation/gold/investigate-gold.jsonl; spec §2.4, §5).
-
-  ERA_COMPANIES=companies.yaml uv run python experiments/v4/draft_investigate_gold.py
-
-Each question needs more than one Ask or Research run. Its gold is a list of parts, each the
-work one sub-run would do:
-  ask parts       expected_answer: values read here from the store, with their ids
-  research parts  expected_refs: model: id patterns (values depend on the model, as in
-                  research-gold)
-  required_points facts a right answer must state, judged by hand or the judge
-  expected_gaps   what a right answer must name as missing or not comparable
-The same questions are the single-Research baseline (design doc §12.2).
-"""
-
 import json
 import re
 from pathlib import Path
@@ -45,7 +31,6 @@ def kpi(ticker: str, metric: str, period: str) -> dict:
 
 
 def guide(ticker: str, gid: str) -> dict:
-    """The latest guide with this id (an update replaces the guide it follows)."""
     result = tools.call("guidance", {"company": ticker})
     return [r for r in result["rows"] if r["id"] == gid][-1]
 
@@ -72,7 +57,6 @@ def ratio(t: str, top: str, bottom: str, period: str, label: str) -> dict:
 
 
 def mid(row: dict, company: str) -> dict:
-    """The midpoint; the scorer also accepts the range itself (both ends)."""
     return derived(f"guidance midpoint {row['id']}", (row["low"] + row["high"]) / 2, row["unit"],
                    company, [row["id"]]) | {"low": row["low"], "high": row["high"]}
 
@@ -99,7 +83,6 @@ def add(qid, category, companies, question, parts, points=(), gaps=(), notes="")
     })
 
 
-# --- peer comparison with reasons -------------------------------------------------------------
 add("uber-lyft-margin-drivers", "peer_reasons", ["UBER", "LYFT"],
     "Which of Uber and Lyft improved its adjusted EBITDA margin on revenue more from Q2 2025 to "
     "Q2 2026, and what does each management say drove it?",
@@ -127,7 +110,6 @@ add("abnb-bkng-growth-rating", "peer_reasons", ["ABNB", "BKNG"],
             "Gives both ratings"],
     gaps=["Airbnb counts nights and experiences, Booking counts room nights"])
 
-# --- reported vs modeled ----------------------------------------------------------------------
 add("dash-beat-model-scenario", "reported_vs_model", ["DASH"],
     "Did DoorDash beat its Q2 2026 Marketplace GOV guidance? Does our model expect Q3 to land "
     "above the Q3 guide, and what would 1 point lower growth do to our price target?",
@@ -144,7 +126,7 @@ add("dash-beat-model-scenario", "reported_vs_model", ["DASH"],
 add("lyft-miss-and-q3", "reported_vs_model", ["LYFT"],
     "Why did our Q2 2026 revenue estimate for Lyft miss, and is our Q3 2026 gross bookings "
     "forecast inside Lyft's Q3 guidance range?",
-    [research(r"model:LYFT:2026-0[45]-\d\d:base:revenue\.2026Q2",  # the estimate, as research-gold
+    [research(r"model:LYFT:2026-0[45]-\d\d:base:revenue\.2026Q2",
               ref("LYFT", "base", "gross_bookings.2026Q3")),
      ask(guide("LYFT", "guide:LYFT:gross_bookings:2026Q3") | {"company": "LYFT"})],
     points=["Splits the Q2 miss into volume or gross value and take rate (the bridge)",
@@ -172,7 +154,6 @@ add("uber-segments-scenario", "reported_vs_model", ["UBER"],
     points=["Gives both growth rates and the gap in points",
             "Gives 2027E adjusted EBITDA and the price target, base vs scenario"])
 
-# --- sector view ------------------------------------------------------------------------------
 add("travel-take-rate-premium", "sector", ["BKNG", "EXPE", "ABNB", "TRIP"],
     "Across the four travel companies, whose take rate moved most from Q2 2025 to Q2 2026, and "
     "does that company trade at a premium to the others on 2027E EV / adjusted EBITDA?",
@@ -208,7 +189,6 @@ add("uber-lyft-nyc-vs-reported", "sector", ["UBER", "LYFT"],
     points=["Says NYC growth is far below reported growth for Uber and close for Lyft"],
     gaps=["TLC covers NYC only and one month; company figures are global and quarterly"])
 
-# --- what changed -----------------------------------------------------------------------------
 add("expe-what-changed", "what_changed", ["EXPE"],
     "What changed for Expedia in its Q2 2026 release: guidance, the main KPIs, and any new risk "
     "factors since the 10-K?",

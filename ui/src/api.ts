@@ -59,7 +59,6 @@ export interface AssistantMessage {
   trace?: TraceEvent[]
 }
 
-/** How a follow-up used the chat's earlier turns (config chat.history). */
 export type History = 'auto' | 'append' | 'rewrite' | 'none'
 
 export interface UserMessage {
@@ -87,7 +86,6 @@ export async function postJSON<T>(url: string, body: unknown): Promise<T> {
   return r.json()
 }
 
-/** Read a text/event-stream response (GET or POST), calling onEvent per `data:` line. */
 export async function stream(url: string, init: RequestInit, onEvent: (e: TraceEvent) => void,
                              signal?: AbortSignal) {
   const r = await fetch(url, { ...init, signal })

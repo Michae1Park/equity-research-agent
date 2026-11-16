@@ -82,7 +82,7 @@ def main() -> None:
         pipeline = SubQuestionRetriever.from_settings(store, retrieval)
     except RuntimeError as e:
         sys.exit(str(e))
-    sec = SecData(ROOT / agent_config["sec_cache"])  # no client: offline
+    sec = SecData(ROOT / agent_config["sec_cache"])
     model = get_model(
         generation["model"], base_url=generation["base_url"], thinking=generation["thinking"]
     )
@@ -99,7 +99,7 @@ def main() -> None:
         )
         for name in ("text", "full")
     }
-    search_lock = threading.Lock()  # the embedder and reranker are shared between workers
+    search_lock = threading.Lock()
     for agent in agents.values():
         agent.toolbox.call = _locked(agent.toolbox.call, search_lock)
 
@@ -159,14 +159,14 @@ def main() -> None:
         }
         with lock:
             done.append(row)
-            _write(out / "results.json", done)  # after every answer, for --resume
+            _write(out / "results.json", done)
         print(f"{q['id']:<42} {variant:<5} {_verdict(row)} {calls:>2} calls {seconds:.0f}s")
         return row
 
     def attempt(task):
         try:
             return answer(task)
-        except Exception as e:  # one failed question shouldn't end the run; --resume retries it
+        except Exception as e:
             print(f"{task[0]['id']:<42} {task[1]:<5} FAILED {type(e).__name__}: {e}"[:300])
 
     with ThreadPoolExecutor(max_workers=run["workers"]) as pool:
@@ -186,9 +186,6 @@ def main() -> None:
 
 
 def scored_as(q: dict, variant: str) -> dict:
-    """A question needing SEC data is a decline question for the variants without it
-    (`text_tools: abstain`); a decline question SEC data can answer is answerable under full
-    (`with_sec_data`: the fields that change)."""
     if variant != "full" and q.get("text_tools") == "abstain":
         return q | {"should_abstain": True}
     if variant == "full" and q.get("with_sec_data"):
@@ -197,8 +194,6 @@ def scored_as(q: dict, variant: str) -> dict:
 
 
 def sources(store: Store, q: dict) -> list[set[str]]:
-    """Each gold source's ids: chunks for 10-K text (restatements included), the fact id for
-    XBRL, nothing for EDGAR metadata (not citable)."""
     per_source = gold_chunks(store, q).per_source
     for i, source in enumerate(q.get("sources", [])):
         if source.get("source_type") == "xbrl":
@@ -207,7 +202,6 @@ def sources(store: Store, q: dict) -> list[set[str]]:
 
 
 def seen_ids(steps) -> list[str]:
-    """Every chunk and XBRL fact id a tool returned: what the agent was shown."""
     ids = []
     for step in steps:
         result = step.result or {}
@@ -217,9 +211,6 @@ def seen_ids(steps) -> list[str]:
 
 
 def tool_use(rows: list[dict], variants: list[str]) -> dict:
-    """Per agent variant: calls per question, errors, repeats, budget stops, and how the
-    tools called match each question's expected_tools (recall: expected tools called;
-    precision: called tools that were expected, over questions that expect some)."""
     out = {}
     for variant in variants:
         group = [r for r in rows if r["context"] == variant and r["steps"]]

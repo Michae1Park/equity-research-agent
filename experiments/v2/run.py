@@ -67,7 +67,6 @@ def main() -> None:
     if not config["score"]["restatements"]:
         questions = [q | {"acceptable_sources": []} for q in questions]
 
-    # 1. Retrieve (V1) and resolve each question's gold chunks.
     try:
         pipeline = SubQuestionRetriever.from_settings(store, retrieval)
     except RuntimeError as e:
@@ -98,7 +97,6 @@ def main() -> None:
         print(f"prompts in {folder}")
         return
 
-    # 2. Generate: one call per (question, context), in parallel.
     model = get_model(
         generation["model"], base_url=generation["base_url"], thinking=generation["thinking"]
     )
@@ -148,11 +146,6 @@ def oracle_context(
     store: Store,
     k: int,
 ) -> list[ChunkRecord]:
-    """V1's top k with every gold source it missed swapped in: the source's own chunk takes
-    the place of the lowest-ranked chunk that is no source's gold. Questions V1 already
-    answers in full get the same context as `retrieved`, so the two differ only where
-    retrieval failed. `per_source`: each source's gold chunks (restatements included);
-    `primary`: the chunks holding the source's own evidence quote."""
     chunks = list(retrieved[:k])
     gold = set().union(*per_source) if per_source else set()
     for ids, own in zip(per_source, primary, strict=True):
@@ -160,7 +153,7 @@ def oracle_context(
             continue
         add = store.get_chunk(own[0])
         drop = next((i for i in reversed(range(len(chunks))) if chunks[i].id not in gold), None)
-        if len(chunks) < k or drop is None:  # room left, or every place is gold: go over k
+        if len(chunks) < k or drop is None:
             chunks.append(add)
         else:
             chunks[drop] = add

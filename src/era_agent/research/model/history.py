@@ -19,17 +19,16 @@ from era_agent.research.model import checks as layer2
 from era_agent.research.model.graph import Model, build, load_template
 from era_agent.store import Store
 
-TEMPLATE_OF = {  # design doc §6.2
+TEMPLATE_OF = {
     "UBER": "segments",
     "BKNG": "marketplace", "EXPE": "marketplace", "ABNB": "marketplace",
     "DASH": "orders", "LYFT": "orders", "CART": "orders",
     "TRIP": "trip",
 }
-FIRST_QUARTER = "2023Q1"  # history from the first quarter every pilot series covers
+FIRST_QUARTER = "2023Q1"
 
 
 def quarters_before(as_of: str, first: str = FIRST_QUARTER) -> list[str]:
-    """Quarters from `first` through the last one ended before the as-of."""
     year, q = int(first[:4]), int(first[5])
     out = []
     while True:
@@ -41,7 +40,6 @@ def quarters_before(as_of: str, first: str = FIRST_QUARTER) -> list[str]:
 
 
 def history(store: Store, ticker: str, quarters: list[str] | None = None):
-    """(model, data pack, checks, exceptions) for one company at the store's as-of."""
     as_of = store.asof.date.isoformat()
     template = TEMPLATE_OF[ticker]
     lines, _ = load_template(template, ticker)
@@ -53,8 +51,6 @@ def history(store: Store, ticker: str, quarters: list[str] | None = None):
 
 
 def _reported(pack, quarters: list[str]) -> list[str]:
-    """Drop quarters no filing reports: trailing ones (ended, not yet released) and leading
-    ones (before the company was public: CART from 2023Q3)."""
     reported = {p for series in pack.values() for p in series}
     while quarters and quarters[-1] not in reported:
         quarters = quarters[:-1]

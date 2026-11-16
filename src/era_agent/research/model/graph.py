@@ -1,39 +1,3 @@
-"""The model graph (V4 design doc §6.2): lines × periods from a template, evaluated in Python.
-
-A template (templates/*.yaml) lists lines; each is
-  input       a reported series from the data pack (blue, with its source id)
-  formula     a DSL expression over other lines (black)
-  assumption  a forecast driver (V4.4; blue, Assumptions tab)
-and says how its fiscal-year column is made (`fy`): sum (flows), last (balances), input (the
-reported FY: per-share lines), formula (ratios recomputed from FY totals) or none.
-
-Columns are quarters, with an FY column after each Q4 of a complete year; lags count quarters
-only. Forecast quarters (V4.4) follow the history: there a line uses its `forecast` expression
-(`forecast_first` in the first forecast quarter, where a growth rate starts from its assumption),
-else its history expression; an input without one is blank. `@name` reads a scalar assumption
-(research/forecast.py sets them; the workbook's Assumptions tab). An FY column that includes
-forecast quarters uses `fy_forecast` for a line whose reported FY is an input (EPS, shares).
-`expr_for` decides a cell's expression for Python and the workbook alike.
-
-A template's `forecast:` section is shorthand, expanded here into ordinary lines (so the workbook
-shows every formula):
-  growth: [x, …]          first forecast quarter (the one guidance anchors): x = x[-4] × (1 + x_g)
-                          (x[-8] × (1 + x_g)² where last year's quarter is missing: ABNB's 2025
-                          GBV); later quarters: x = fyp(x) × (1 + x_g) × @x.season, last fiscal
-                          year's total grown and split by the quarter's seasonal share (spec
-                          §3.2; @x.season reads @x.s1…@x.s4 by the column's quarter), or the
-                          q-4 rule where last year isn't complete. x_g = x / x[-4] − 1 in
-                          history, @x_g.g0 in the first forecast quarter, then x_g[-1] × @fade
-  ratios: {r: band, …}    r = clamp(r[-4] + r_shift, @r.lo, @r.hi) (r[-8] where r[-4] is missing);
-                          r_shift = r − r[-4] in history, @r.shift0 first, then r_shift[-1] ×
-                          @fade until the change is lapped (four forecast quarters), then 0: a
-                          one-off change (UBER's UK move to agent) is not compounded into a
-                          second year (band: research.yaml ratio_bounds)
-
-`templates/statements.yaml` (the condensed statements, §8.3) is read first, then the company's
-template (its operating build), whose lines may replace statement lines by name.
-"""
-
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -56,20 +20,20 @@ class Line:
     statement: str
     fy: str
     expr: Expr | None = None
-    source: str | None = None  # input: q:<metric> or kpi:<metric>[.<segment>]
-    fallback: str | None = None  # input: a second source for periods the first lacks (Q4 EPS)
-    default: float | None = None  # input: the value when the company doesn't tag it, logged
-    forecast: Expr | None = None  # forecast quarters
-    forecast_first: Expr | None = None  # the first forecast quarter (a growth rate's start)
-    fy_forecast: Expr | None = None  # an FY column with forecast quarters, for fy: input
-    forecast_late: Expr | None = None  # forecast quarters after the fourth (a lapped change)
+    source: str | None = None
+    fallback: str | None = None
+    default: float | None = None
+    forecast: Expr | None = None
+    forecast_first: Expr | None = None
+    fy_forecast: Expr | None = None
+    forecast_late: Expr | None = None
 
 
 @dataclass
 class Cell:
     value: float | None
-    kind: str  # input, default, formula, missing
-    ref: str | None = None  # input: its citable id
+    kind: str
+    ref: str | None = None
     filed: str | None = None
 
 
@@ -79,11 +43,11 @@ class Model:
     template: str
     as_of: str
     lines: list[Line]
-    quarters: list[str]  # history, then forecast
-    columns: list[str]  # quarters and FY columns, in sheet order
+    quarters: list[str]
+    columns: list[str]
     cells: dict[tuple[str, str], Cell] = field(default_factory=dict)
-    defaults: list[str] = field(default_factory=list)  # "line period": filled by `default`
-    forecast: list[str] = field(default_factory=list)  # the forecast quarters
+    defaults: list[str] = field(default_factory=list)
+    forecast: list[str] = field(default_factory=list)
     assumptions: dict[str, float] = field(default_factory=dict)
 
     @property
@@ -112,8 +76,6 @@ class Model:
 
 
 def load_template(name: str, ticker: str) -> tuple[list[Line], dict]:
-    """The statements' lines, then the template's (bound to the company's KPI names); a
-    template line replaces a statement line of the same name. Returns (lines, template)."""
     template = yaml.safe_load((TEMPLATES / f"{name}.yaml").read_text())
     if ticker not in template.get("companies", {}):
         raise ValueError(f"{ticker} has no binding in template {name!r}")
@@ -122,7 +84,7 @@ def load_template(name: str, ticker: str) -> tuple[list[Line], dict]:
     for line_name, spec in template["lines"].items():
         specs.pop(line_name, None)
         specs[line_name] = spec
-    for line_name, spec in (binding.get("lines") or {}).items():  # the company's own definition
+    for line_name, spec in (binding.get("lines") or {}).items():
         specs[line_name] = spec
     for line_name in binding.get("drop", []):
         specs.pop(line_name)
@@ -134,13 +96,11 @@ def load_template(name: str, ticker: str) -> tuple[list[Line], dict]:
         raise ValueError(f"{name}: lines share labels {twice} (a YAML comma in a label?)")
     _check_names(lines)
     for regime in ("history", "forecast"):
-        _ordered(lines, regime)  # a cycle in either is a template error
+        _ordered(lines, regime)
     return lines, template
 
 
 def seasonal(line: str, first: str, later: str) -> dict:
-    """A level driver's forecast (module docstring): q-4 in the first forecast quarter, then
-    last year's total × (1 + growth) × the quarter's seasonal share, else q-4."""
     q4 = f"first({line}[-4], {line}[-8] * (1 + {first})) * (1 + {first})"
     return {"forecast_first": q4,
             "forecast": f"first(fyp({line}) * (1 + {later}) * @{line}.season, "
@@ -148,14 +108,12 @@ def seasonal(line: str, first: str, later: str) -> dict:
 
 
 def season(name: str, column: str) -> str:
-    """@x.season in a quarter column → @x.s<quarter> (the seasonal share of that quarter)."""
     if name.endswith(".season") and not column.startswith("FY"):
         return f"{name[:-len('season')]}s{column[5]}"
     return name
 
 
 def _expand_forecast(specs: dict, rules: dict) -> None:
-    """Growth drivers and ratios (see the module docstring) into lines, in place."""
     for x in rules.get("growth", []):
         specs[x] = dict(specs[x], **seasonal(x, f"{x}_g", f"{x}_g"))
         specs[f"{x}_g"] = {"kind": "formula", "expr": f"{x} / {x}[-4] - 1", "unit": "fraction",
@@ -193,7 +151,6 @@ def _line(name: str, spec: dict, sources: dict) -> Line:
 
 
 def _exprs(x: Line, regime: str = "all") -> list[Expr]:
-    """A line's expressions: all, those evaluated in history columns, or in forecast ones."""
     if regime == "history":
         found = [x.expr]
     elif regime == "forecast":
@@ -212,9 +169,6 @@ def _check_names(lines: list[Line]) -> None:
 
 
 def _ordered(lines: list[Line], regime: str) -> list[Line]:
-    """Evaluation order for history or forecast columns: a line after every line it reads in
-    its own period. (In history take_rate = revenue / gross_bookings; in the forecast revenue =
-    gross_bookings × take_rate: the two regimes order differently.)"""
     by_name = {x.name: x for x in lines}
     done: list[Line] = []
     placed: set[str] = set()
@@ -238,7 +192,6 @@ def _ordered(lines: list[Line], regime: str) -> list[Line]:
 
 
 def columns_for(quarters: list[str]) -> list[str]:
-    """Quarters in order, with FY<year> after the Q4 of each year whose four quarters are in."""
     out = []
     for q in quarters:
         out.append(q)
@@ -251,8 +204,6 @@ def columns_for(quarters: list[str]) -> list[str]:
 def build(ticker: str, template: str, as_of: str, quarters: list[str],
           pack: dict[str, dict[str, Point]], forecast: list[str] = (),
           assumptions: dict[str, float] | None = None) -> Model:
-    """The model: every input from the data pack, every formula evaluated; forecast quarters
-    (after `quarters`, the history) from the forecast expressions and `assumptions`."""
     lines, _ = load_template(template, ticker)
     model = Model(ticker, template, as_of, lines, list(quarters) + list(forecast),
                   columns_for(list(quarters) + list(forecast)), forecast=list(forecast),
@@ -262,7 +213,6 @@ def build(ticker: str, template: str, as_of: str, quarters: list[str],
 
 
 def evaluate_cells(model: Model, pack) -> None:
-    """(Re)compute every cell, in column order (a forecast reads earlier columns)."""
     model.cells.clear()
     model.defaults.clear()
     orders = {r: _ordered(model.lines, r) for r in ("history", "forecast")}
@@ -275,7 +225,6 @@ def evaluate_cells(model: Model, pack) -> None:
 
 
 def expr_for(model: Model, line: Line, column: str) -> Expr | str | None:
-    """The cell's expression, or its FY rule ("sum", "last"), or None (an input or blank)."""
     if column.startswith("FY"):
         year = column[2:]
         forecast_year = any(q.startswith(year) for q in model.forecast)
@@ -306,7 +255,7 @@ def _cell(model: Model, line: Line, quarter: str, pack) -> Cell:
             return Cell(float(line.default), "default")
         return Cell(None, "missing")
     if line.kind == "assumption":
-        return Cell(None, "missing")  # V4.4
+        return Cell(None, "missing")
     return _formula(model, line, quarter)
 
 
@@ -345,7 +294,6 @@ def _formula(model: Model, line: Line, column: str, expr: Expr | None = None) ->
         return None if None in values else sum(values)
 
     year = int(column[2:] if fiscal else column[:4])
-    # A formula stays a formula when an input is missing: blank, never 0
     readers = Readers(read_line, lambda name: read_year(name, year),
                       lambda name: model.assumptions.get(season(name, column)),
                       lambda name: read_year(name, year - 1))

@@ -1,20 +1,3 @@
-"""The model's formula language (V4 design doc §6.2): one expression, two evaluators.
-
-  gross_bookings * take_rate          arithmetic over lines of the same period
-  trips[-4] * (1 + trips_g)           a line k quarters back (an Excel cell k quarter columns left)
-  fy(revenue)                         the fiscal year's four quarters summed (FY columns)
-  fyp(revenue)                        the previous fiscal year's four quarters summed (a quarter
-                                      column: the seasonal-share forecast, design doc §6.2)
-  min(a, b) · max(a, b) · if_(c, a, b)
-  first(a, b)                         a, or b where a can't be computed (an input missing, a zero
-                                      divisor); Excel: IFERROR(IF(COUNT(a's cells)=n, a, b), b)
-  @fade                               an assumption (a cell on the Assumptions tab)
-
-Parsed with Python's `ast`, never `eval`: anything else is a DslError. `evaluate` computes a
-value; `to_excel` writes the same expression as an Excel formula, so the workbook recomputes
-what Python did (the parity test, tests/test_model_workbook.py).
-"""
-
 import ast
 import re
 from collections.abc import Callable
@@ -25,7 +8,7 @@ OPERATORS = {ast.Add: "+", ast.Sub: "-", ast.Mult: "*", ast.Div: "/", ast.Pow: "
 COMPARE = {ast.Lt: "<", ast.LtE: "<=", ast.Gt: ">", ast.GtE: ">=", ast.Eq: "=", ast.NotEq: "<>"}
 BINARY = {ast.Add: lambda a, b: a + b, ast.Sub: lambda a, b: a - b,
           ast.Mult: lambda a, b: a * b, ast.Div: lambda a, b: a / b, ast.Pow: lambda a, b: a**b}
-YEAR = ("fy", "fyp")  # functions over a fiscal year's four quarters of one line
+YEAR = ("fy", "fyp")
 ASSUMPTION = re.compile(r"@([A-Za-z_][\w.]*)")
 
 
@@ -40,14 +23,11 @@ class Expr:
 
     @property
     def lines(self) -> set[str]:
-        """The lines it reads (same period or lagged), for ordering the graph."""
         return {n.id for n in ast.walk(self.tree) if isinstance(n, ast.Name)
                 and n.id not in (*FUNCTIONS, *YEAR, "first") and not n.id.startswith("A__")}
 
     @property
     def same_period(self) -> set[str]:
-        """Lines read at the expression's own period (lags and fy() excluded): the edges that
-        must not form a cycle."""
         out: set[str] = set()
 
         def walk(node, lagged):
@@ -71,7 +51,6 @@ class Expr:
 
 
 def parse(text: str) -> Expr:
-    """An expression, checked: only the constructs above."""
     source = ASSUMPTION.sub(lambda m: "A__" + m[1].replace(".", "__"), text.strip())
     try:
         tree = ast.parse(source, mode="eval").body
@@ -107,9 +86,6 @@ def _check(node: ast.AST, text: str) -> None:
             raise DslError(f"{text!r}: a lag is line[-k], k a positive whole number")
 
 
-# Readers: how an evaluator looks a line up. line(name, lag) → value; fy(name) → the year's sum;
-# fy_prev(name) → the previous year's sum; assumption(name) → value. The graph supplies them per
-# period.
 @dataclass
 class Readers:
     line: Callable[[str, int], float | None]
@@ -119,7 +95,6 @@ class Readers:
 
 
 def evaluate(expr: Expr, read: Readers) -> float | None:
-    """The value, or None when an input is missing (shown blank, never as 0)."""
     try:
         return _eval(expr.tree, read)
     except _Missing:
@@ -174,8 +149,6 @@ def _need(value):
     return float(value)
 
 
-# Excel: cell(name, lag) → "C12"; fy(name) → "C12:F12"; fy_prev(name) → the previous year's
-# range; assumption(name) → "Assumptions!$C$4".
 @dataclass
 class Cells:
     cell: Callable[[str, int], str | None]
@@ -185,7 +158,6 @@ class Cells:
 
 
 def to_excel(expr: Expr, cells: Cells) -> str | None:
-    """The formula ("=C12*C30"), or None when a lag reaches before the first column."""
     try:
         return "=" + _xl(expr.tree, cells, top=True)
     except _Missing:
@@ -217,20 +189,19 @@ def _xl(node, cells: Cells, top: bool = False) -> str:
     if name == "first":
         try:
             b = _xl(node.args[1], cells, top=True)
-        except _Missing:  # b reads before the first column: only a can give a value
+        except _Missing:
             return _xl(node.args[0], cells)
         try:
             a = _xl(node.args[0], cells, top=True)
-        except _Missing:  # a reads before the first column: Python falls back to b as well
+        except _Missing:
             return b
         refs = _refs(node.args[0], cells)
-        count = sum(4 if ":" in x else 1 for x in refs)  # a year range holds four cells
+        count = sum(4 if ":" in x else 1 for x in refs)
         return f"IFERROR(IF(COUNT({','.join(refs)})={count},{a},{b}),{b})"
     return f"{FUNCTIONS[name]}({','.join(_xl(a, cells, top=True) for a in node.args)})"
 
 
 def _refs(node, cells: Cells) -> list[str]:
-    """The cells an expression reads (lines, year ranges and assumptions), for first()'s COUNT."""
     out = []
     in_year = {id(a) for n in ast.walk(node) if isinstance(n, ast.Call)
                and getattr(n.func, "id", "") in YEAR for a in n.args}

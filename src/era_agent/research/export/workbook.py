@@ -1,15 +1,3 @@
-"""The workbook (V4 design doc §11): V4.3 writes the Model tab from a built model.
-
-Rows are the model's lines, grouped by statement; columns its quarters and FY columns. Inputs
-are values in blue with their source id as a cell note; every other cell is a live formula in
-black, written from the same DSL expression Python evaluated (research/model/dsl.py), so the
-sheet recomputes what Python did. tests/test_model_workbook.py has LibreOffice recalculate it
-and compares every formula cell (the parity test). A cell Python leaves blank (an input
-missing) is left blank, not written as a formula Excel would compute from empty cells as 0.
-V4.4 adds forecast columns and the Assumptions tab (one blue value per scalar assumption, which
-forecast formulas reference). The other tabs (Summary, Bridge, …) come with V4.5–V4.6.
-"""
-
 import shutil
 import subprocess
 import tempfile
@@ -26,11 +14,11 @@ from era_agent.research.model.graph import Model, expr_for, season
 BLUE, BLACK = Font(color="0000FF"), Font(color="000000")
 HEADER = Font(bold=True)
 SECTION = PatternFill("solid", fgColor="D9DEE8")
-FORECAST = PatternFill("solid", fgColor="F3F6FB")  # forecast columns, shaded
+FORECAST = PatternFill("solid", fgColor="F3F6FB")
 STATEMENTS = (("operating", "Operating build"), ("income", "Income statement"),
               ("cash_flow", "Cash flow"), ("balance", "Balance sheet"))
 FORMATS = {"fraction": "0.0%", "USD per share": "0.00", "USD": "#,##0.00"}
-FIRST_COLUMN = 3  # A: line, B: unit
+FIRST_COLUMN = 3
 
 
 def write(model: Model, path: Path) -> Path:
@@ -60,7 +48,6 @@ def write(model: Model, path: Path) -> Path:
 
 
 def layout(model: Model, sheet) -> dict[str, int]:
-    """Header and statement sections; returns each line's row."""
     sheet.cell(1, 1, f"{model.ticker} model (history) as of {model.as_of}").font = HEADER
     sheet.cell(2, 1, "line").font = HEADER
     sheet.cell(2, 2, "unit").font = HEADER
@@ -85,7 +72,6 @@ def layout(model: Model, sheet) -> dict[str, int]:
 
 
 def assumptions_tab(model: Model, book) -> dict[str, str]:
-    """The Assumptions tab: name and value per assumption; returns each one's cell."""
     if not model.assumptions:
         return {}
     sheet = book.create_sheet("Assumptions")
@@ -117,7 +103,6 @@ def _cells(model: Model, rows: dict[str, int], column_of: dict[str, int],
 
 
 def formula(model: Model, line, column: str, cells) -> str:
-    """The cell's formula: an FY rule or the expression Python evaluated (graph.expr_for)."""
     ref, year_range, assumptions = cells
     expr = expr_for(model, line, column)
     if expr == "last":
@@ -139,13 +124,11 @@ def formula(model: Model, line, column: str, cells) -> str:
 
 
 def parity(model: Model, path: Path) -> tuple[int, list[str]]:
-    """LibreOffice recalculates the workbook at `path`; returns (formula cells compared, cells
-    that differ from Python). Needs `soffice` on PATH."""
     soffice = shutil.which("soffice")
     if soffice is None:
         raise RuntimeError("the parity check needs LibreOffice (soffice) on PATH")
     formulas = load_workbook(path)["Model"]
-    rows = layout(model, Workbook().active)  # the rows write() used, by line name
+    rows = layout(model, Workbook().active)
     with tempfile.TemporaryDirectory() as tmp:
         subprocess.run([soffice, "--headless", "--calc", "--convert-to", "xlsx", "--outdir", tmp,
                         str(path)], check=True, capture_output=True, timeout=300)

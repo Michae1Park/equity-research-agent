@@ -26,16 +26,15 @@ NOTE = re.compile(r"^note\s+\d+\b", re.I)
 FURNITURE = [
     re.compile(
         r"^.{0,80}\|\s*(?:\d{4}\s+)?form\s+10-k\s*\|\s*\d{1,3}$", re.I
-    ),  # Apple Inc. | 2025 Form 10-K | 22
-    re.compile(r"^\d{1,3}$"),  # bare page number
+    ),
+    re.compile(r"^\d{1,3}$"),
     re.compile(r"^table of contents$", re.I),
 ]
 UNITS = re.compile(r"in (millions|thousands|billions)", re.I)
 NUMBER = re.compile(
     r"^[\s$(]*-?[\d.,]+\s*[)%]*\s*$"
-)  # a cell that is only a number: "1,234", "(7,763)", "12 %"
+)
 MAX_HEADING = 300
-# Item 8 has the same parts in every 10-K, so its levels come from these names, not from styling.
 ITEM8_TOP = re.compile(
     r"^(index to .*financial statements|notes to .*financial statements"
     r"|report of independent registered|consolidated (statements?|balance sheets?)\b)",
@@ -48,7 +47,6 @@ def norm(text: str) -> str:
 
 
 def emphasis(node: NavigableString, stop: Tag) -> str:
-    """'B', 'I', 'BI' or '-' for one text run, from tags and inline styles up to `stop`."""
     bold = italic = False
     for parent in node.parents:
         if parent is stop:
@@ -62,7 +60,6 @@ def emphasis(node: NavigableString, stop: Tag) -> str:
 
 
 def runs(tag: Tag) -> list[tuple[str, str]]:
-    """(emphasis, text) per non-empty text run, adjacent runs of one emphasis merged."""
     out: list[tuple[str, str]] = []
     for s in tag.find_all(string=True):
         if not s.strip():
@@ -80,8 +77,6 @@ def hidden(tag: Tag) -> bool:
 
 
 def blocks(root: Tag):
-    """Paragraphs and tables in reading order. A layout table (no number outside its first column)
-    yields one paragraph per row, since filers use them for headings and bullets."""
     for child in root.children:
         if not isinstance(child, Tag) or hidden(child):
             continue
@@ -111,8 +106,6 @@ def _paragraph(tag: Tag):
 
 
 def heading_text(block: dict) -> tuple[str, str] | None:
-    """(style, heading) if the paragraph is a heading candidate: all emphasized, or a run-in
-    heading (an emphasized lead sentence followed by plain body text in the same paragraph)."""
     runs_ = [(e, t) for e, t in block["runs"] if t]
     styles = {e for e, _ in runs_ if re.search(r"\w", _)}
     text = block["text"]
@@ -137,8 +130,6 @@ def heading_text(block: dict) -> tuple[str, str] | None:
 def draft(html_path: Path, ticker: str, fiscal_year: int) -> dict:
     soup = BeautifulSoup(html_path.read_text(encoding="utf-8"), "lxml")
     stream = list(blocks(soup.body))
-    # A short line repeated 3+ times and always followed by another heading ("Apple Inc." over every
-    # statement title) is a label, not a heading.
     seen: dict[str, list[bool]] = {}
     for b, nxt in zip(stream, stream[1:] + [{"kind": "end"}], strict=True):
         if b["kind"] == "paragraph" and len(b["text"]) <= 40 and heading_text(b):
@@ -191,7 +182,7 @@ def draft(html_path: Path, ticker: str, fiscal_year: int) -> dict:
             stack = stack[: h["level"] - 1] + [h["text"]]
             h["path"] = list(stack)
         path: list[str] = []
-        last_units: tuple[tuple[str, ...], str] | None = None  # (path, units) of the previous table
+        last_units: tuple[tuple[str, ...], str] | None = None
         for i, b in enumerate(item["blocks"]):
             if "heading" in b:
                 path = item["headings"][b["heading"]]["path"]
@@ -205,7 +196,6 @@ def draft(html_path: Path, ticker: str, fiscal_year: int) -> dict:
                 units, source = (
                     (f"in {found.group(1).lower()}", "caption") if found else (None, None)
                 )
-                # A continuation table, or one under a Note that states units once, inherits them.
                 if not units and last_units and tuple(path[:2]) == last_units[0]:
                     units, source = last_units[1], "inherited"
                 if units:
@@ -246,9 +236,6 @@ def draft(html_path: Path, ticker: str, fiscal_year: int) -> dict:
 
 
 def _item8_levels(headings: list[dict]) -> None:
-    """Statements, the notes header, the index and auditor reports = 1; "Note N" = 2; inside a note
-    each new style goes one level deeper (3, 4, ...); inside anything else, one level below it. An
-    auditor's critical audit matters (each a topic heading) sit under "Critical Audit Matter(s)"."""
     styles: list[str] = []
     in_note = in_cam = False
     for h in headings:
@@ -274,8 +261,6 @@ def _item_text(item: dict) -> str:
 
 
 def _risk_factors(item: dict | None) -> dict | None:
-    """Units of Item 1A: the preamble before the first heading, an optional summary (a top-level
-    heading containing "summary"), and one unit per deepest-level heading (the risk factors)."""
     if not item or not item["headings"]:
         return None
     deepest = max(h["level"] for h in item["headings"])
@@ -300,10 +285,9 @@ def _risk_factors(item: dict | None) -> dict | None:
                 }
                 units.append(current)
             elif current and current["kind"] == "summary":
-                current["body"].append(text)  # a summary's own subheadings stay in the summary
+                current["body"].append(text)
             else:
-                current = None  # a category heading belongs to the next risk factor's path
-            # A run-in heading's body text is in the same paragraph.
+                current = None
             if current and text != h["text"]:
                 current["body"].append(text[len(h["text"]) :].strip())
             continue
@@ -312,7 +296,6 @@ def _risk_factors(item: dict | None) -> dict | None:
 
 
 def finish(gt: dict) -> dict:
-    """Ids, end anchors, char and token counts; drops the working fields."""
     from transformers import AutoTokenizer
 
     tok = AutoTokenizer.from_pretrained(gt["tokenizer"], local_files_only=True)

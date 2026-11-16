@@ -1,16 +1,3 @@
-"""Structured facts from XBRL (V4 design doc §3.2), two sources into one `facts` table.
-
-  company facts  SEC's companyfacts JSON: us-gaap, dei, srt facts, consolidated only, each
-                 with the filing it came from and that filing's date
-  inline XBRL    the filing's own HTML (ix:nonFraction): what company facts leaves out, which
-                 is facts with dimensions (segments, geography) and company-specific concepts
-                 (bkng:DeferredMerchantBookings)
-
-Every fact keeps its filing's date (`filed`), so the store's AsOf decides what a run sees, and
-a citable id (research/refs.py): xbrl:<T>:<taxonomy>:<concept>:<accession>:<start>/<end> or
-ixbrl:<accession>:<fact id>.
-"""
-
 import json
 import re
 from dataclasses import dataclass, field
@@ -20,7 +7,7 @@ from bs4 import BeautifulSoup
 
 from era_agent.research.refs import xbrl_id
 
-STANDARD = ("us-gaap", "dei", "srt")  # taxonomies company facts carries
+STANDARD = ("us-gaap", "dei", "srt")
 FORMS = ("10-K", "10-Q")
 
 
@@ -32,20 +19,19 @@ class Fact:
     concept: str
     value: float
     unit: str
-    start: str | None  # None for an instant (balance-sheet) fact
+    start: str | None
     end: str
     accession: str
     form: str
     filed: str
     fy: int | None = None
     fp: str | None = None
-    dims: dict[str, str] = field(default_factory=dict)  # axis → member; {} = consolidated
+    dims: dict[str, str] = field(default_factory=dict)
     decimals: int | None = None
-    source: str = "companyfacts"  # or "ixbrl"
+    source: str = "companyfacts"
 
 
 def company_facts(ticker: str, data: dict, since: str) -> list[Fact]:
-    """Facts from 10-Ks and 10-Qs filed on or after `since`, from a companyfacts JSON."""
     out = []
     for taxonomy, concepts in data.get("facts", {}).items():
         for concept, entry in concepts.items():
@@ -75,18 +61,15 @@ def company_facts(ticker: str, data: dict, since: str) -> list[Fact]:
     return out
 
 
-# --- inline XBRL ---------------------------------------------------------------------------
-
 NUMBER = re.compile(r"[^\d.]")
 
 
 def _number(element, text: str) -> float | None:
-    """An ix:nonFraction's value: its text read per its format, times 10^scale, signed."""
     fmt = (element.get("format") or "").lower()
     if "zerodash" in fmt or "fixed-zero" in fmt or text.strip() in ("—", "-", "–"):
         value = 0.0
     else:
-        if "numcommadecimal" in fmt.replace("-", ""):  # 1.234,5 style
+        if "numcommadecimal" in fmt.replace("-", ""):
             text = text.replace(".", "").replace(",", ".")
         digits = NUMBER.sub("", text.replace(",", ""))
         if not digits or digits == ".":
@@ -99,8 +82,6 @@ def _number(element, text: str) -> float | None:
 def inline_facts(
     ticker: str, html: str, accession: str, form: str, filed: str, keep_standard: bool = False
 ) -> list[Fact]:
-    """Facts from one filing's inline XBRL: those with dimensions, and those of company-specific
-    concepts (keep_standard: every fact)."""
     soup = BeautifulSoup(html, "lxml")
     contexts = {}
     for cx in soup.find_all(re.compile(r"(^|:)context$")):
@@ -161,7 +142,6 @@ def inline_facts(
 
 
 def filing_facts(folder: Path) -> list[Fact]:
-    """Inline facts of one V4 filing folder (acquisition/filings.py), 10-K or 10-Q."""
     meta = json.loads((folder / "metadata.json").read_text())
     html = (folder / meta["documents"][0]["name"]).read_text(encoding="utf-8")
     return inline_facts(

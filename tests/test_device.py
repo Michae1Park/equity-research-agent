@@ -20,9 +20,9 @@ def test_explicit_device_wins(monkeypatch):
 
 
 def test_gpu_only_when_free(monkeypatch):
-    smi(monkeypatch, "45000\n")  # vLLM stopped
+    smi(monkeypatch, "45000\n")
     assert embeddings.pick_device(None) == "cuda"
-    smi(monkeypatch, "660\n")  # vLLM at 97%
+    smi(monkeypatch, "660\n")
     assert embeddings.pick_device(None) == "cpu"
 
 

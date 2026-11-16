@@ -1,21 +1,3 @@
-"""Rule-based structure labels for V4 filings: 10-K, 10-Q, earnings release.
-
-Headings in these filings are regular (a bold "PART I" line, then bold "Item 2." lines), and a
-release has no Items, so rules label all three. On the four V3 10-Ks with LLM labels, rules put
-every block both keep in the same Item (100%); V3 keeps V0's LLM structure agent. The
-labels have the structure agent's shape, so V0's assembly and chunkers run unchanged.
-
-  item_heading  a bold, short, non-link "Item n." paragraph (or one-row table) that moves
-                forward in the form's Item order; 10-Q keys carry the open Part (I.2, II.1A)
-  part_heading  "PART I" / "PART II" (dropped from the document, opens the Part)
-  heading       other bold paragraphs under 120 characters (level 1): kind statement, notes_header
-                or auditor_report by their wording (so V0's assembly moves statements filed in
-                Item 15 into Item 8, as the LLM agent's labels do), else other
-  furniture     a bare page number before a page break
-  data_table    every other table; units from the table or the paragraph before it
-  body          everything else
-"""
-
 import json
 import re
 import time
@@ -26,12 +8,12 @@ from era_agent.preprocess.blocks import Block, read_blocks
 from era_agent.preprocess.forms import FormSpec, form_spec
 from era_agent.preprocess.structure import assemble
 
-PART = re.compile(r"^part\s+(iv|i{1,3})\b[\s.:—–-]*", re.I)  # EXPE: "Part III. Item 10. …"
-ITEM = re.compile(r"^i\s?t\s?e\s?m\s?s?\s+(\d{1,2}[a-c]?)\b", re.I)  # TRIP: "I tem 2.", "Ite m 8."
+PART = re.compile(r"^part\s+(iv|i{1,3})\b[\s.:—–-]*", re.I)
+ITEM = re.compile(r"^i\s?t\s?e\s?m\s?s?\s+(\d{1,2}[a-c]?)\b", re.I)
 UNITS = re.compile(r"in (thousands|millions|billions)", re.I)
 PAGE_NUMBER = re.compile(r"^\s*(\d{1,3}|[A-Z]-\d{1,3})\s*$")
-MAX_HEADING = 150  # characters: longer bold text is a paragraph, not a heading
-HEADING_KINDS = (  # the structure agent's heading kinds a statement page's title shows
+MAX_HEADING = 150
+HEADING_KINDS = (
     ("auditor_report", re.compile(r"^report of independent registered public accounting", re.I)),
     ("notes_header", re.compile(r"^notes to (the )?(condensed )?consolidated financial", re.I)),
     ("statement", re.compile(
@@ -49,9 +31,8 @@ def _bold(b: Block) -> bool:
 
 
 def label_blocks(blocks: list[Block], spec: FormSpec) -> dict[str, dict]:
-    """A label per block, in the structure agent's format."""
     labels: dict[str, dict] = {}
-    part, last = None, -1  # the open Part; index of the last Item in spec.items
+    part, last = None, -1
     for i, b in enumerate(blocks):
         text = _text(b).strip()
         short = len(text) <= MAX_HEADING and not b.link
@@ -84,8 +65,6 @@ def label_blocks(blocks: list[Block], spec: FormSpec) -> dict[str, dict]:
 
 
 def release_blocks(documents: list[tuple[str, str]]) -> list[Block]:
-    """One block list for a release's exhibits, each opened by a pseudo-Item heading block.
-    `documents`: (exhibit type, HTML) in index order, EX-99.1 first."""
     blocks: list[Block] = []
     for n, (exhibit, html) in enumerate(documents, start=1):
         kind = "proxy" if exhibit == "DEF14A" else "release" if n == 1 else "exhibit"
@@ -97,24 +76,21 @@ def release_blocks(documents: list[tuple[str, str]]) -> list[Block]:
 
 
 def label_release(blocks: list[Block], spec: FormSpec) -> dict[str, dict]:
-    """Releases: the body rules, with each exhibit's pseudo-heading as its Item."""
     labels = label_blocks([b for b in blocks if "-" in b.id], spec)
     labels = {
         i: (lb if lb["role"] != "item_heading" else {"id": i, "role": "body"})
         for i, lb in labels.items()
-    }  # "Item 2.02" in an exhibit is not a section
+    }
     for n, b in enumerate(b for b in blocks if "-" not in b.id):
         labels[b.id] = {"id": b.id, "role": "item_heading", "item": spec.items[n]}
     return {b.id: labels[b.id] for b in blocks}
 
 
 def preprocess_filing(folder: Path, out: Path, registrant: str) -> dict:
-    """A V4 10-K, 10-Q, release or proxy folder (acquisition/filings.py) → blocks.json, labels.json,
-    labels-log.json and document.json in `out`, as V0's preprocess writes them."""
     meta = json.loads((folder / "metadata.json").read_text())
     spec = form_spec(meta["form"])
     t = time.time()
-    if meta["form"] in ("ER", "DEF14A"):  # a proxy: one document, one pseudo-Item
+    if meta["form"] in ("ER", "DEF14A"):
         docs = [
             (d["type"], (folder / d["name"]).read_text(encoding="utf-8", errors="replace"))
             for d in meta["documents"]

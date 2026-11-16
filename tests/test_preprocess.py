@@ -1,10 +1,3 @@
-"""V0 preprocessing: the structure prompt, its output schema and the validator list the same
-values; the validator's rules.
-
-The model never sees structure.schema.json (guided decoding only constrains its tokens), so the
-prompt must name every value the schema allows, and the validator must check the same ones.
-"""
-
 import json
 import re
 
@@ -21,12 +14,10 @@ ROW_FIELDS = FIELDS["rows"]["items"]["properties"]
 
 
 def section(heading: str) -> str:
-    """The prompt text under `# heading`, up to the next top-level heading."""
     return re.search(rf"^# {heading}\n(.*?)(?=^# |\Z)", PROMPT, re.S | re.M).group(1)
 
 
 def table_keys(text: str) -> list[str]:
-    """The backticked first cells of a Markdown table's rows, header excluded."""
     return re.findall(r"^\| `(\w+)` \|", text, re.M)[1:]
 
 
@@ -66,7 +57,6 @@ def test_role_fields_match_schema_and_validator():
 
 
 def table(*rows: list[str]) -> Block:
-    """A table block; an Item heading set in a one-row table (AMZN) is an `item_heading`."""
     return Block(
         id="b0053", kind="table", text="\n".join(" | ".join(r) for r in rows), rows=list(rows)
     )
@@ -97,5 +87,5 @@ def test_form_spec_drives_the_item_rules():
     other = FormSpec("X", ("B", "A"), frozenset({"A"}))
     block = type("B", (), {"id": "b1"})()
     ctx = Context(item="B", items=["B"], depth=0, previous={}, form=other)
-    assert items_in_order(block, {"item": "A"}, ctx) is None  # A follows B in this form
-    assert statement_kinds_in_item_8(block, {"kind": "statement"}, ctx)  # B holds no statements
+    assert items_in_order(block, {"item": "A"}, ctx) is None
+    assert statement_kinds_in_item_8(block, {"kind": "statement"}, ctx)

@@ -1,6 +1,3 @@
-"""Forecast columns, assumptions and guidance anchors (research/model/graph.py and
-research/forecast.py)."""
-
 import json
 import shutil
 
@@ -51,7 +48,7 @@ def pack(gb_missing=False):
     price = [95, 95, 95, 95, 100, 100, 100, 100, 105, 105]
     gb = [v * p for v, p in zip(volume, price, strict=True)]
     if gb_missing:
-        gb[6] = None  # 2025Q3 not extracted (ABNB)
+        gb[6] = None
     return {"kpi:volume": series(volume), "kpi:price": series(price), "kpi:gb": series(gb),
             "q:revenue": series([0.1 * g if g else 120.0 for g in gb])}
 
@@ -65,7 +62,7 @@ def model(p=None):
 
 def test_growth_drivers_start_at_the_last_yoy_and_fade(templates):
     m = model()
-    assert m.assumptions["volume_g.g0"] == pytest.approx(0.1)  # 2026Q2 vs 2025Q2
+    assert m.assumptions["volume_g.g0"] == pytest.approx(0.1)
     assert m.value("volume_g", "2026Q3") == pytest.approx(0.1)
     assert m.value("volume_g", "2026Q4") == pytest.approx(0.09)
     assert m.value("volume", "2026Q3") == pytest.approx(12 * 1.1)
@@ -75,7 +72,7 @@ def test_growth_drivers_start_at_the_last_yoy_and_fade(templates):
 def test_ratios_hold_last_years_quarter_within_bounds(templates):
     m = model()
     assert m.value("take_rate", "2026Q3") == pytest.approx(0.1)
-    m.assumptions["take_rate.shift0"] = 0.5  # far outside: clamped to the 8-quarter max + 50 bps
+    m.assumptions["take_rate.shift0"] = 0.5
     graph.evaluate_cells(m, pack())
     assert m.value("take_rate", "2026Q3") == pytest.approx(0.105)
 
@@ -84,7 +81,7 @@ def test_a_missing_prior_year_quarter_steps_from_two_years_back(templates):
     p = pack(gb_missing=True)
     m = model(p)
     assert m.value("gross_bookings", "2025Q3") is None
-    assert m.value("take_rate", "2026Q3") is not None  # first(take_rate[-4], take_rate[-8])
+    assert m.value("take_rate", "2026Q3") is not None
 
 
 def test_forecast_columns_hold_formulas_only(templates):
@@ -146,7 +143,7 @@ def test_proposals_are_bounded_anchors_kept_and_evidence_required(templates):
         {"driver": "take_rate.shift0", "value": 0.01, "evidence": ["kpi:TEST:gb:2026Q2"]},
     ]})
     overrides, applied, exceptions = apply(reply, m, bounds, Resolver())
-    assert overrides["volume_g.g0"] == pytest.approx(bounds["volume_g.g0"][1])  # clipped
+    assert overrides["volume_g.g0"] == pytest.approx(bounds["volume_g.g0"][1])
     assert overrides["fade"] == 0.75
     assert "price_g.g0" not in overrides and "take_rate.shift0" not in overrides
     assert [p.clipped for p in applied] == [True, True]
@@ -161,13 +158,13 @@ def test_a_ratio_change_holds_until_lapped(templates):
     graph.evaluate_cells(m, pack())
     assert m.value("take_rate_shift", "2026Q3") == pytest.approx(0.002)
     assert m.value("take_rate_shift", "2027Q1") == pytest.approx(0.002 * 0.9**2)
-    for q in ("2027Q2", "2027Q3"):  # the fourth forecast quarter, then the fifth
+    for q in ("2027Q2", "2027Q3"):
         m.forecast.append(q)
         m.quarters.append(q)
         m.columns.append(q)
     graph.evaluate_cells(m, pack())
     assert m.value("take_rate_shift", "2027Q2") == pytest.approx(0.002 * 0.9**3)
-    assert m.value("take_rate_shift", "2027Q3") == 0.0  # lapped
+    assert m.value("take_rate_shift", "2027Q3") == 0.0
 
 
 def test_revenue_bridge_adds_up():
@@ -194,12 +191,12 @@ def test_revenue_bridge_adds_up():
 def test_later_quarters_split_last_years_total_by_seasonal_share(templates):
     m = model()
     shares, years = fc.seasonal_shares(m, "volume")
-    assert years == ["2024", "2025"]  # 2026 is incomplete: fewer than three years, all used
+    assert years == ["2024", "2025"]
     assert shares[3] == pytest.approx((12 / 42 + 13 / 46) / 2)
     assert m.assumptions["volume.s4"] == pytest.approx(shares[3])
     g = m.value("volume_g", "2026Q4")
     assert m.value("volume", "2026Q4") == pytest.approx(46 * (1 + g) * shares[3])
-    assert m.value("volume", "2026Q3") == pytest.approx(12 * 1.1)  # first quarter: q-4 rule
+    assert m.value("volume", "2026Q3") == pytest.approx(12 * 1.1)
 
 
 def test_seasonal_shares_use_the_latest_three_complete_years(templates):

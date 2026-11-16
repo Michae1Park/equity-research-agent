@@ -1,11 +1,3 @@
-"""`era companies verify`: check companies.yaml against SEC data (V4 spec §7, items 1–2).
-
-Resolves each ticker's CIK from SEC's company_tickers.json and records what EDGAR's
-submissions say: legal name, exchanges, fiscal year-end, and how many 10-Ks, 10-Qs and
-earnings releases (8-K Item 2.02) were filed since the window start. Problems are returned
-as messages, not raised, so one run reports every company.
-"""
-
 from pathlib import Path
 
 import yaml
@@ -16,7 +8,6 @@ TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 
 
 def filing_rows(pages: list[dict], since: str) -> list[dict]:
-    """Every filing on or after `since` across column-oriented submissions pages, deduplicated."""
     rows = {}
     for page in pages:
         for i, filed in enumerate(page["filingDate"]):
@@ -26,7 +17,6 @@ def filing_rows(pages: list[dict], since: str) -> list[dict]:
 
 
 def counts(rows: list[dict]) -> dict[str, int]:
-    """Original 10-Ks and 10-Qs, and 8-Ks carrying Item 2.02 (results of operations)."""
     return {
         "10-K": sum(r["form"] == "10-K" for r in rows),
         "10-Q": sum(r["form"] == "10-Q" for r in rows),
@@ -36,7 +26,6 @@ def counts(rows: list[dict]) -> dict[str, int]:
 
 def verify_company(ticker: str, entry: dict, cik: int | None, submissions: dict,
                    pages: list[dict], since: str) -> tuple[dict, list[str]]:
-    """The entry with `cik` and `verified` filled in, and any problems found."""
     problems = []
     if cik is None:
         return entry, [f"{ticker}: not in SEC company_tickers.json"]
@@ -62,8 +51,6 @@ def verify_company(ticker: str, entry: dict, cik: int | None, submissions: dict,
 
 def verify(path: Path, data_dir: Path, user_agent: str, since: str | None = None,
            refresh: bool = False) -> list[str]:
-    """Verify every company in `path` and write the results back to it. `since` defaults to
-    the file's window start."""
     client = EdgarClient(user_agent)
     cache = data_dir / "raw" / "edgar"
     tickers = client.cached_json(TICKERS_URL, cache / "company_tickers.json", refresh)

@@ -1,15 +1,3 @@
-"""V1 retrieval pipeline: sub-question retrieval over a fixed hybrid search. Spec:
-experiments/V1_RETRIEVAL.md §3. Spec: docs/stages/V1_RETRIEVAL.md.
-
-  question ─► QueryDecomposer ─► sub-questions (one per company and filing)    decompose.py
-           ─► HybridSearch per sub-question: keyword (BM25) + dense ─► RRF ─► rerank
-           ─► round-robin merge ─► top k
-  (SubQuestionRetriever runs the whole thing; from_settings builds it from the config.)
-
-On a parent-child database (V0 method P) the search runs over the children, and each reranked
-child is swapped for its parent, best child first, each parent once.
-"""
-
 from dataclasses import dataclass, field
 
 from era_agent.retrieval.decompose import QueryDecomposer, SubQuestion
@@ -26,18 +14,15 @@ from era_agent.store import ChildRecord, ChunkRecord, Store
 
 @dataclass
 class Search:
-    """One sub-question's search, kept for the report."""
-
     query: str
     ticker: str | None
     fiscal_years: list[int] | None
-    keyword: list[str]  # chunk ids, BM25 order
-    dense: list[str]  # chunk ids, cosine order
-    reranked: list[tuple[str, float]]  # (chunk id, rerank score), best first
+    keyword: list[str]
+    dense: list[str]
+    reranked: list[tuple[str, float]]
 
 
 def fuse(rankings: list[list[ChunkRecord]], rrf_k: int) -> list[ChunkRecord]:
-    """Reciprocal rank fusion: each list contributes 1 / (rrf_k + rank) per chunk."""
     scores: dict[str, float] = {}
     chunks: dict[str, ChunkRecord] = {}
     for ranking in rankings:
@@ -49,8 +34,6 @@ def fuse(rankings: list[list[ChunkRecord]], rrf_k: int) -> list[ChunkRecord]:
 
 @dataclass
 class HybridSearch:
-    """keyword + dense → RRF → rerank, filtered to one sub-question's company and filings."""
-
     store: Store
     embedder: Embedder
     reranker: Reranker
@@ -73,7 +56,7 @@ class HybridSearch:
         order = sorted(range(len(candidates)), key=lambda i: scores[i], reverse=True)
         reranked = [(candidates[i], float(scores[i])) for i in order]
         if children:
-            best = {}  # parent id → its best child's score (children are best first)
+            best = {}
             for child, score in reranked:
                 best.setdefault(child.parent_id, score)
             reranked = [(self.store.get_chunk(pid), score) for pid, score in best.items()]
@@ -90,15 +73,11 @@ class HybridSearch:
 
 
 def _parents(store: Store, children: list[ChildRecord]) -> list[ChunkRecord]:
-    """Each child's parent, once, in the order of its first child."""
     return [store.get_chunk(pid) for pid in dict.fromkeys(c.parent_id for c in children)]
 
 
 def _top_score(search: Search) -> float:
     return search.reranked[0][1] if search.reranked else float("-inf")
-
-
-# --- Sub-question retrieval: the whole pipeline -------------------------------------------
 
 
 @dataclass
@@ -109,23 +88,12 @@ class Result:
 
 @dataclass
 class SubQuestionRetriever:
-    """Decompose, search each sub-question, and merge round-robin: every sub-question's best
-    chunk first, then every sub-question's second, … Each gets ceil(k / sub-questions) places
-    (at least 2), so every company the question needs is represented. Within a round, the
-    sub-question whose best chunk scored highest goes first, so "which company…" questions
-    put the matching company at the top.
-
-    slot_search off: one unfiltered search with the question as asked.
-    """
-
     decomposer: QueryDecomposer
     hybrid: HybridSearch
     slot_search: bool = True
 
     @classmethod
     def from_settings(cls, store: Store, settings: dict) -> "SubQuestionRetriever":
-        """The pipeline as the config's `retrieval:` section sets it. The database's vectors
-        must come from the configured embedder."""
         embedder = get_embedder(
             settings["embedder"], settings["device"], settings.get("gpu_free_mb", GPU_FREE_MB)
         )
@@ -159,8 +127,6 @@ class SubQuestionRetriever:
         periods: list[str] | None = None,
         forms: list[str] | None = None,
     ) -> Result:
-        """tickers, fiscal_years: replace what the question names (QueryDecomposer.decompose).
-        periods, forms (V4): filter every sub-question; periods replace the years."""
         subs = (
             self.decomposer.decompose(question, tickers, fiscal_years)
             if self.slot_search
@@ -173,7 +139,6 @@ class SubQuestionRetriever:
             ]
         per_sub = k if len(subs) == 1 else max(2, -(-k // len(subs)))
         searched = [self.hybrid.search(sub, per_sub) for sub in subs]
-        # Round-robin, the best-matching sub-question first in every round.
         rankings = [
             chunks for chunks, _ in sorted(searched, key=lambda p: _top_score(p[1]), reverse=True)
         ]

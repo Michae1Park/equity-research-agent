@@ -1,8 +1,3 @@
-"""Fetch 10-K filings from SEC EDGAR.
-
-SEC fair-access rules: a User-Agent with contact details, and at most 10 requests/s.
-"""
-
 import json
 import logging
 import time
@@ -66,7 +61,6 @@ class EdgarClient:
 
 
 def annual_reports(pages: list[dict]) -> list[dict]:
-    """Original 10-Ks (no amendments) across column-oriented submissions pages, deduplicated."""
     reports = {}
     for page in pages:
         for i, form in enumerate(page["form"]):
@@ -76,11 +70,6 @@ def annual_reports(pages: list[dict]) -> list[dict]:
 
 
 def fiscal_years_by_accession(company_facts: dict) -> dict[str, int]:
-    """The fiscal year each 10-K was tagged with in XBRL.
-
-    Public float is a required 10-K cover-page fact, so every 10-K reports it, and
-    each fact carries its filing's fiscal year (`fy`).
-    """
     public_float = company_facts.get("facts", {}).get("dei", {}).get("EntityPublicFloat", {})
     facts = public_float.get("units", {}).get("USD", [])
     return {fact["accn"]: fact["fy"] for fact in facts if fact.get("form") == "10-K"}
@@ -89,7 +78,6 @@ def fiscal_years_by_accession(company_facts: dict) -> dict[str, int]:
 def resolve_filings(
     company: Company, pages: list[dict], company_facts: dict, fiscal_years: tuple[int, ...]
 ) -> list[Filing]:
-    """Exactly one 10-K per fiscal year, using the XBRL fiscal year (else the period-end year)."""
     xbrl_years = fiscal_years_by_accession(company_facts)
     by_year: dict[int, list[Filing]] = {}
     for report in annual_reports(pages):
@@ -124,7 +112,6 @@ def fetch_company(
     data_dir: Path,
     refresh: bool = False,
 ) -> list[Filing]:
-    """Download a company's 10-Ks for the given fiscal years, each with a metadata.json."""
     cache = data_dir / "raw" / "edgar" / company.ticker
     cik = f"CIK{company.cik:010d}"
     submissions = client.cached_json(
@@ -134,8 +121,6 @@ def fetch_company(
         f"{DATA_URL}/api/xbrl/companyfacts/{cik}.json", cache / "companyfacts.json", refresh
     )
 
-    # The main document lists only the ~1,000 most recent filings; frequent filers
-    # push older 10-Ks into linked pages.
     pages = [submissions["filings"]["recent"]] + [
         client.cached_json(f"{DATA_URL}/submissions/{page['name']}", cache / page["name"], refresh)
         for page in submissions["filings"].get("files", [])

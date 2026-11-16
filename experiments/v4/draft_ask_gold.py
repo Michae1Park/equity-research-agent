@@ -1,17 +1,3 @@
-"""V4.2: draft the Ask gold set (evaluation/gold/ask-gold.jsonl) over the eight companies.
-
-  uv run python experiments/v4/draft_ask_gold.py
-
-Number questions take their values from the extraction gold (evaluation/gold/extraction-gold.jsonl,
-cross-checked against XBRL and printed totals) or from the XBRL quarters, never typed by hand; a
-calculated answer (growth, margin, beat or miss) is computed here from those labels. Text and
-decline questions are written below with verbatim evidence; every evidence quote is checked to
-appear in a chunk of the named filing visible at the question's as-of, or the script stops.
-
-Format: the V3 gold fields, with `period`, `form` and `as_of` (design doc §12.2). Categories are
-spec §2.1's; `kind` is figure, calculation, comparison, text or decline.
-"""
-
 import json
 import re
 from pathlib import Path
@@ -24,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 LABELS = ROOT / "evaluation" / "gold" / "extraction-gold.jsonl"
 OUT = ROOT / "evaluation" / "gold" / "ask-gold.jsonl"
 DB = ROOT / "data" / "v4" / "build" / "parent_child.db"
-AS_OF = "2026-09-01"  # every Q2 2026 release and 10-Q is public
+AS_OF = "2026-09-01"
 NAMES = {"ABNB": "Airbnb", "BKNG": "Booking Holdings", "CART": "Instacart", "DASH": "DoorDash",
          "EXPE": "Expedia", "LYFT": "Lyft", "TRIP": "Tripadvisor", "UBER": "Uber"}
 
@@ -76,8 +62,6 @@ def value(r: dict, **extra) -> dict:
     return {"value": r["value"], "unit": r["unit"], "company": r["ticker"]} | extra
 
 
-# --- Reported financials (financials; GAAP lines also in the release) --------------------------
-
 for t, p in (("LYFT", "2026Q2"), ("DASH", "2026Q2"), ("BKNG", "2026Q1"), ("CART", "2025Q4")):
     r, e = label(t, p, "revenue"), label(t, p, "adj_ebitda")
     add(f"{t.lower()}-revenue-adj-ebitda-{p.lower()}",
@@ -103,18 +87,16 @@ for t, p in (("TRIP", "2026Q2"), ("UBER", "2025Q3")):
         f"{nice(p)}?", "reported_financials", "figure", value(r), [source(r)], ["company_kpis"],
         period=p)
 
-# Q4 from the 10-K: XBRL has no three-month Q4 fact, so financials derives FY - 9M.
 store = Store(DB, AsOf.of(AS_OF))
 for t in ("DASH", "LYFT", "EXPE"):
     quarters = derive(store, t, "revenue", metrics()["revenue"])
     q4 = next(q for q in quarters if q.id.endswith("2025Q4"))
     r = label(t, "2025Q4", "revenue")
-    assert abs(q4.value / 1e6 - r["value"]) < 1, (t, q4.value, r["value"])  # 10-K ties the release
+    assert abs(q4.value / 1e6 - r["value"]) < 1, (t, q4.value, r["value"])
     add(f"{t.lower()}-revenue-2025q4", f"What was {NAMES[t]}'s revenue in the fourth quarter of "
         "2025?", "reported_financials", "figure", value(r), [source(r)], ["financials"],
         period="2025Q4", notes=f"financials derives it ({q4.derivation}); the release prints it")
 
-# --- Operating KPIs ----------------------------------------------------------------------------
 
 for t, p, m, seg, what in (
     ("UBER", "2026Q2", "gross_bookings", "mobility", "Mobility gross bookings"),
@@ -141,7 +123,6 @@ add("uber-gross-bookings-segments-2026q2", "Break down Uber's Q2 2026 gross book
     "operating_kpis", "figure", [value(x, segment=x["segment"]) for x in r], [source(x) for x in r],
     ["company_kpis"], period="2026Q2")
 
-# Comparisons across companies: values only; definitions differ (the answer should say so).
 for qid, question, picks in (
     ("gross-bookings-bkng-expe-2026q2",
      "Compare Booking Holdings' and Expedia's gross bookings in Q2 2026.",
@@ -157,8 +138,6 @@ for qid, question, picks in (
     r = [label(t, "2026Q2", m, s) for t, m, s in picks]
     add(qid, question, "operating_kpis", "comparison", [value(x) for x in r],
         [source(x) for x in r], ["company_kpis"], period="2026Q2")
-
-# --- Calculations on reported figures ----------------------------------------------------------
 
 
 def pct(a, b):
@@ -194,7 +173,6 @@ for t, gb in (("UBER", "gross_bookings"), ("DASH", "marketplace_gov")):
         {"value": round(r["value"] / b["value"] * 100, 2), "unit": "percent", "company": t},
         [source(r), source(b)], ["company_kpis", "calculator"], period="2026Q2", tolerance=0.01)
 
-# --- Guidance ----------------------------------------------------------------------------------
 
 for t, metric, what in (
     ("DASH", "adj_ebitda", "adjusted EBITDA"),
@@ -216,7 +194,6 @@ add("abnb-guide-ebitda-margin-fy2026", "What adjusted EBITDA margin does Airbnb 
     "guidance", "figure", value(low), [source(low)], ["guidance"], period="FY2026",
     notes="Open-ended: 'at least'; the answer should say it is a floor")
 
-# Guide vs actual: did the quarter land inside, above or below the range?
 for t, metric, issued, target in (
     ("UBER", "gross_bookings", "2026Q1", "2026Q2"),
     ("DASH", "adj_ebitda", "2026Q1", "2026Q2"),
@@ -229,8 +206,6 @@ for t, metric, issued, target in (
     actual = label(t, target, metric)
     where = ("above" if actual["value"] > high["value"] else
              "below" if actual["value"] < low["value"] else "within")
-    # The actual and the bound it crossed (both bounds when it lands within); the unbeaten bound
-    # need not be claimed (gold change after run 3)
     bounds = {"above": [high], "below": [low], "within": [low, high]}[where]
     add(f"{t.lower()}-{metric.replace('_', '-')}-vs-guide-{target.lower()}",
         f"Did {NAMES[t]}'s {nice(target)} {metric.replace('_', ' ').replace('adj ', 'adjusted ')} "
@@ -240,15 +215,12 @@ for t, metric, issued, target in (
         points=[f"The actual was {where} the guided range"],
         answer_type="number_set", notes=f"actual {where} the range")
 
-# --- Filing text, declines and false premises: written by hand ----------------------------------
 HAND = ROOT / "experiments" / "v4" / "ask_gold_hand.json"
 for q in json.loads(HAND.read_text()):
     questions.append(q | {"split": "dev" if len(questions) % 2 else "test"})
 
 
 def check_evidence(q: dict) -> list[str]:
-    """Each source's evidence in a chunk of its company, period and form, visible at the
-    question's as-of; whitespace and case ignored."""
     s = Store(DB, AsOf.of(q["as_of"]))
     problems = []
     for src in q["sources"]:

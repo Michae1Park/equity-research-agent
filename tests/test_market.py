@@ -1,5 +1,3 @@
-"""Market and macro data under the as-of rule (acquisition/market.py, Store.series)."""
-
 import json
 
 from era_agent.acquisition.market import market_rows
@@ -21,7 +19,7 @@ def raw_dir(tmp_path):
         for d in (3, 4, 5)
     ]
     (raw / "prices" / "UBER.json").write_text(json.dumps({"rows": prices}))
-    cpi = [  # Jan 2025 CPI, first print then revised a year later
+    cpi = [
         {"date": "2025-01-01", "value": "100.0", "realtime_start": "2025-02-12"},
         {"date": "2025-01-01", "value": "101.0", "realtime_start": "2026-02-13"},
     ]
@@ -59,7 +57,7 @@ def test_revised_series_use_the_vintage_known_then(tmp_path):
 
 def test_unrevised_daily_series_are_published_the_next_day_and_gaps_skipped(tmp_path):
     s = store(tmp_path, "2026-08-05")
-    assert s.series("macro:DGS10") == []  # the 08-04 yield is published on 08-05
+    assert s.series("macro:DGS10") == []
     assert Store(tmp_path / "m.db", AsOf.of("2026-08-06")).series("macro:DGS10") == [
         ("2026-08-04", 4.0)
     ]

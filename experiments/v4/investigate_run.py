@@ -91,7 +91,6 @@ def baseline(agent, q: dict) -> dict:
 
 
 def investigate(agent, q: dict) -> dict:
-    """One Investigate run: ask and research agents over one shared model book."""
     research = agent(q["as_of"])
     ask = agent(q["as_of"], "ask", research.toolbox.book)
     inv = Investigator(research.model, {"ask": ask, "research": research}).run(q["question"])
@@ -99,7 +98,6 @@ def investigate(agent, q: dict) -> dict:
              "stop": s.stop, "calls": s.calls, "seconds": s.seconds,
              "answer": (s.answer or {}).get("answer"),
              "claims": (s.answer or {}).get("claims")} for s in inv.sub_runs]
-    # sub-runs have their own contexts: peak tokens is the largest single prompt among them
     steps = [asdict(s) for s in inv.steps] + [asdict(s) for r in inv.sub_runs for s in r.steps]
     over = [s.id for s in inv.sub_runs if s.stop not in ("answered", "")]
     return {"id": q["id"], "category": q["category"], "question": q["question"],
@@ -120,11 +118,10 @@ def score(row: dict, q: dict, config: dict) -> dict:
                            for c in numeric)
 
             missing = [v.get("label") or v.get("id") for v in _expected(part, row)
-                       if not found(v) and not (  # a guidance midpoint: or the range itself
+                       if not found(v) and not (
                            "low" in v and found(v | {"value": v["low"]})
                            and found(v | {"value": v["high"]}))]
         else:
-            # a rating is text: its claim is "cited", not verified
             ids = [i for c in claims if c["status"] in GOOD + ("cited",) for i in c["chunk_ids"]]
             missing = [p for p in part["expected_refs"]
                        if not any(re.match(p + "$", i) for i in ids)]
@@ -140,13 +137,11 @@ def score(row: dict, q: dict, config: dict) -> dict:
         "unverified": unverified, "auto_pass": parts_ok and not unverified
         and not row.get("abstained"),
         "peak_tokens": peak, "context_cap": config["agent"]["max_context"],
-        "budget_hit": row["stop"] != "answered",  # Investigate: any sub-run on its budget
+        "budget_hit": row["stop"] != "answered",
     }
 
 
 def _expected(part: dict, row: dict) -> list[dict]:
-    """The values to find; a guide row (low, high) is both ends. pick "cheapest": only the
-    company ranked cheapest by the run's own compare_peers call (none: every value)."""
     values = []
     for v in part["expected_answer"]:
         if "value" in v:

@@ -1,14 +1,3 @@
-"""V4.5: draft the Research gold set (evaluation/gold/research-gold.jsonl).
-
-  uv run python experiments/v4/draft_research_gold.py
-
-Research answers compute something new, so the gold checks how, not a number (design doc
-§11.2): each question names the model: ids a right answer must cite (regular expressions over
-model:<T>:<as_of>:<version>:<line>.<period>), and every answer must list the assumptions behind
-its model numbers. Categories are spec §2.2's; debates come with Report mode (V4.6).
-Per company: 3 forecast, 2 scenario, 2 valuation and 1 variance review; 8 peer comparisons.
-"""
-
 import json
 import re
 from pathlib import Path
@@ -18,13 +7,13 @@ OUT = ROOT / "evaluation" / "gold" / "research-gold.jsonl"
 AS_OF = "2026-09-01"
 NAMES = {"ABNB": "Airbnb", "BKNG": "Booking Holdings", "CART": "Instacart", "DASH": "DoorDash",
          "EXPE": "Expedia", "LYFT": "Lyft", "TRIP": "Tripadvisor", "UBER": "Uber"}
-MAIN = {  # the main KPI's model line and how a question names it
+MAIN = {
     "UBER": ("gross_bookings", "gross bookings"), "LYFT": ("gross_bookings", "gross bookings"),
     "DASH": ("gross_bookings", "Marketplace GOV"), "CART": ("gross_bookings", "GTV"),
     "BKNG": ("volume", "room nights"), "EXPE": ("gross_bookings", "gross bookings"),
     "ABNB": ("volume", "nights and experiences booked"), "TRIP": ("revenue", "revenue"),
 }
-RATE = {  # a take-rate (or margin) driver and how a question names a 50 bp cut
+RATE = {
     "UBER": ("take_rate_mobility.shift0", "Mobility take rate falls 50 bps"),
     "TRIP": ("adj_ebitda_margin.shift0", "adjusted EBITDA margin is 100 bps lower"),
 }

@@ -1,11 +1,3 @@
-"""Number trace and lint (design doc §10.2): every number in the note's text must be a fact.
-
-A number traces when it equals a fact's value at the precision it is written, after units
-("$9.7B" traces to 9,712 USD millions; "+3.2%" to 3.21 percent). Years, quarters, section and
-list numbers, and F-ids are not figures. Untraced numbers are the lint's errors: the writer
-gets one repair turn, then the sentences that still hold one are dropped and logged.
-"""
-
 import re
 from dataclasses import dataclass
 
@@ -14,7 +6,7 @@ from era_agent.research.note.facts import Facts
 NUMBER = re.compile(r"(?<![\w.])(?P<sign>[+\-−])?\$?"
                     r"(?P<num>\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)"
                     r"(?P<suffix>\s?(?:%|pts?|bps|x|B|M|bn|billion|million)\b|%)?")
-NOT_FIGURES = re.compile(r"\b[A-Z]{2,5}-(?:FY)?\d{4}(?:Q[1-4])?(?:-[\w.]+)+"  # chunk ids
+NOT_FIGURES = re.compile(r"\b[A-Z]{2,5}-(?:FY)?\d{4}(?:Q[1-4])?(?:-[\w.]+)+"
                          r"|\b\d{4}-\d\d-\d\d\b|\b(?:FY)?(?:19|20)\d\d(?:Q[1-4]|E|A)?\b"
                          r"|\bQ[1-4]\b|\bF-\d+\b|\bX-\d+\b|\bE-\d+\b|\bsections? \d+(?:\.\d+)?\b"
                          r"|\b\d+-(?:week|month|year|day)\b|\bForm \d+\b|\b\d+-[KQ]\b"
@@ -29,7 +21,6 @@ class Untraced:
 
 
 def figures(text: str) -> list[tuple[str, float, str]]:
-    """(as written, value in the fact's base units, kind) for each figure in a text."""
     cleaned = NOT_FIGURES.sub(lambda m: " " * len(m.group(0)), text)
     out = []
     for m in NUMBER.finditer(cleaned):
@@ -75,7 +66,7 @@ def traces(raw: str, value: float, kind: str, facts: Facts) -> bool:
             continue
         if kind == "plain" and f.unit in ("USD millions", "count millions"):
             candidates += [f.value / 1e3]
-        if f.unit == "weight":  # stored as a fraction, printed as a percentage
+        if f.unit == "weight":
             candidates = [f.value * 100]
         if any(abs(abs(value) - abs(c)) <= slack + 1e-9 for c in candidates):
             return True
@@ -83,6 +74,5 @@ def traces(raw: str, value: float, kind: str, facts: Facts) -> bool:
 
 
 def check(text: str, facts: Facts, where: str) -> list[Untraced]:
-    """The numbers in a text that trace to no fact."""
     return [Untraced(raw, where) for raw, value, kind in figures(text)
             if not traces(raw, value, kind, facts)]

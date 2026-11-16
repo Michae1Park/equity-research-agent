@@ -1,7 +1,3 @@
-"""Parent-child chunking with LlamaIndex's HierarchicalNodeParser: PARENT-token parents, each with
-CHILD-token children (what search matches). Spec: experiments/V0_PARSING_CHUNKING.md §3.2.
-"""
-
 from era_agent.chunking import common
 from era_agent.chunking.common import (
     assign_ids,
@@ -17,9 +13,6 @@ from era_agent.chunking.common import (
 
 
 def parent_child(document: dict) -> list[dict]:
-    """Parents ≤ PARENT tokens that never cross a subsection, each with children ≤ CHILD tokens
-    (what search matches). Each data table is its own parent; its children are a title (caption
-    + header rows) and one per row."""
     parser = _hierarchical_parser()
     chunks: list[dict] = []
     for section in document["sections"]:
@@ -29,7 +22,7 @@ def parent_child(document: dict) -> list[dict]:
             paragraphs = [
                 b for b in group["body"] if b["kind"] != "table" and b["id"] not in captioned
             ]
-            if paragraphs:  # a heading over only tables (and their captions) is in their chunks
+            if paragraphs:
                 chunks += _parents(section, group["headings"] + paragraphs, parser)
             for b in group["body"]:
                 if b["kind"] == "table":
@@ -38,8 +31,6 @@ def parent_child(document: dict) -> list[dict]:
 
 
 def _hierarchical_parser():
-    """Two sentence splitters, parent then child, counting Qwen3 tokens and cutting sentences
-    as C5 does (LlamaIndex's default punkt splitter cuts at "U.S. Tariffs")."""
     from llama_index.core.node_parser import HierarchicalNodeParser, SentenceSplitter
 
     def splitter(size: int, overlap: int) -> SentenceSplitter:
@@ -61,9 +52,6 @@ def _hierarchical_parser():
 
 
 def _parents(section: dict, blocks: list[dict], parser) -> list[dict]:
-    """One subsection's text as parent chunks, each listing its children. A parent's blocks are
-    the ones its text spans. Every child carries the subsection's heading path, since most
-    children's text doesn't include the heading (T2)."""
     from llama_index.core import Document
 
     path = chunk_path(blocks)
@@ -76,7 +64,6 @@ def _parents(section: dict, blocks: list[dict], parser) -> list[dict]:
     doc = Document(
         text=text,
         metadata=meta,
-        # Metadata rides along but doesn't count toward chunk sizes.
         excluded_embed_metadata_keys=list(meta),
         excluded_llm_metadata_keys=list(meta),
     )

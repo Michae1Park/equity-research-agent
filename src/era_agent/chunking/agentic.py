@@ -1,7 +1,3 @@
-"""Agentic chunking with Chonkie's SlumberChunker: the LLM picks each chunk's end.
-Spec: experiments/V0_PARSING_CHUNKING.md §3.3.
-"""
-
 import json
 import re
 
@@ -10,11 +6,6 @@ from era_agent.chunking.common import assign_ids, make_chunk, table_chunks, toke
 
 
 def agentic(document: dict, model: str, base_url: str) -> list[dict]:
-    """Each Item is rendered as Markdown, tables as [TABLE n] placeholders. The LLM picks each
-    chunk's end among paragraph (then sentence) candidates, within two rules it can't break: each
-    risk factor is chunked on its own (one within TARGET stays whole, without a call), and a chunk
-    never ends on a heading. Character spans map chunks back to blocks; a table placeholder is
-    replaced by the table's own chunk(s)."""
     chunker = _slumber_chunker(model, base_url)
     chunks: list[dict] = []
     for section in document["sections"]:
@@ -34,7 +25,7 @@ def agentic(document: dict, model: str, base_url: str) -> list[dict]:
             if prose and body:
                 chunks.append(make_chunk(section, "prose", body, prose))
             for b, s in touched:
-                if b["kind"] == "table" and start <= s < end:  # the placeholder starts here
+                if b["kind"] == "table" and start <= s < end:
                     chunks += table_chunks(section, index[b["id"]])
     return assign_ids(document, chunks)
 
@@ -43,9 +34,7 @@ HEADING_LINE = re.compile(r"#{1,7} ")
 
 
 def _segments(text: str, spans: list[tuple[dict, int, int]]) -> list[tuple[int, int]]:
-    """Spans of `text` chunked separately: a new one starts at each risk-factor heading, or at
-    the first of the headings directly above it (its category)."""
-    starts, run = [0], None  # run: where the current run of consecutive headings starts
+    starts, run = [0], None
     for b, s, _ in spans:
         run = (s if run is None else run) if b["kind"] == "heading" else None
         if b.get("heading_kind") == "risk_factor" and run > starts[-1]:
@@ -54,8 +43,6 @@ def _segments(text: str, spans: list[tuple[dict, int, int]]) -> list[tuple[int, 
 
 
 def _glue_headings(text: str, cuts: list[int]) -> list[int]:
-    """Chunk starts, each moved back over the headings right before it, so no chunk ends on a
-    heading; a chunk left empty goes."""
     out: list[int] = []
     for c in cuts:
         while c > 0 and text[c - 2 : c] == "\n\n":
@@ -73,9 +60,9 @@ def _slumber_chunker(model: str, base_url: str):
 
     candidates = RecursiveRules(
         levels=[
-            RecursiveLevel(delimiters=["\n\n"]),  # paragraphs
-            RecursiveLevel(delimiters=[". ", "; ", "? ", "! "]),  # sentences
-            RecursiveLevel(whitespace=True),  # words
+            RecursiveLevel(delimiters=["\n\n"]),
+            RecursiveLevel(delimiters=[". ", "; ", "? ", "! "]),
+            RecursiveLevel(whitespace=True),
         ]
     )
     return SlumberChunker(
@@ -84,7 +71,7 @@ def _slumber_chunker(model: str, base_url: str):
         chunk_size=common.TARGET,
         rules=candidates,
         candidate_size=common.CANDIDATE_SIZE,
-        min_characters_per_chunk=1,  # the default 24 merges short headings into the previous one
+        min_characters_per_chunk=1,
         extract_mode="json",
         verbose=False,
     )
@@ -95,8 +82,6 @@ def _item_title(section: dict) -> str:
 
 
 def render_markdown(section: dict) -> tuple[str, list[tuple[dict, int, int]]]:
-    """(Markdown, [(block, start, end)]): `# Item`, a heading at level n as #×(n+1), tables as
-    [TABLE n]; paragraphs separated by blank lines."""
     parts = [f"# {_item_title(section)}"]
     spans: list[tuple[dict, int, int]] = []
     pos = len(parts[0]) + 2
@@ -116,7 +101,6 @@ def render_markdown(section: dict) -> tuple[str, list[tuple[dict, int, int]]]:
 
 
 def _strip_markdown(text: str, section: dict) -> str:
-    """Back to plain lines: no # marks, table placeholders or Item title."""
     lines = [re.sub(r"^#{1,7} ", "", ln) for ln in text.strip().split("\n\n")]
     drop = {_item_title(section), ""}
     return "\n".join(
@@ -128,8 +112,6 @@ def _genie(model: str, base_url: str):
     from chonkie.genie import OpenAIGenie
 
     class LocalGenie(OpenAIGenie):
-        """OpenAIGenie with temperature 0, thinking off and schema-constrained JSON (vLLM)."""
-
         def _create(self, prompt: str, **kw):
             return self.client.chat.completions.create(
                 model=self.model,

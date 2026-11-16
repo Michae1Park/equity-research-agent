@@ -37,7 +37,7 @@ def main() -> None:
     rows = json.loads((out / "results.json").read_text())
     score = config["score"]
     judge = Judge(get_model(score["judge_model"], base_url=score["judge_base_url"]))
-    if args.rejudge:  # judge against the gold's current points, not those copied into the run
+    if args.rejudge:
         paths = config["run"]["gold"]
         points = {
             q["id"]: q["required_points"]
@@ -48,7 +48,6 @@ def main() -> None:
         for r in rows:
             r["required_points"] = points.get(r["id"], r["required_points"])
 
-    # Declined answers are wrong whatever they say, so they aren't judged.
     todo = [
         r
         for r in rows

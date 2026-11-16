@@ -1,5 +1,3 @@
-"""The model graph, data pack and layer-2 checks (research/model/), on a synthetic company."""
-
 import pytest
 import yaml
 
@@ -68,10 +66,10 @@ def test_columns_and_formulas(templates):
     m = model()
     assert m.columns == [*QUARTERS[:4], "FY2025", "2026Q1"]
     assert m.value("take_rate", "2025Q2") == pytest.approx(0.1)
-    assert m.value("revenue", "FY2025") == 46  # sum
-    assert m.value("total_assets", "FY2025") == 50  # last
-    assert m.value("take_rate", "FY2025") == pytest.approx(46 / 460)  # formula on FY totals
-    assert m.value("gb_growth", "2026Q1") == pytest.approx(0.4)  # lag skips the FY column
+    assert m.value("revenue", "FY2025") == 46
+    assert m.value("total_assets", "FY2025") == 50
+    assert m.value("take_rate", "FY2025") == pytest.approx(46 / 460)
+    assert m.value("gb_growth", "2026Q1") == pytest.approx(0.4)
     assert m.value("gb_growth", "2025Q4") is None and m.value("gb_growth", "FY2025") is None
     assert m.cells[("revenue", "2025Q1")].ref == "id:2025Q1"
     assert m.defaults == [f"mezzanine {q}" for q in QUARTERS]
@@ -86,7 +84,7 @@ def test_checks_pass_on_a_consistent_model(templates):
 
 
 @pytest.mark.parametrize("broken, check", [
-    ({"q:equity_total": None}, "balance"),  # equity off by 5 in one quarter
+    ({"q:equity_total": None}, "balance"),
     ({"kpi:gb.b": None}, "segments_sum"),
     ({"q:revenue": None}, "quarters_sum"),
 ])
@@ -95,7 +93,7 @@ def test_checks_fail_on_a_broken_model(templates, broken, check):
     source = next(iter(broken))
     series = dict(p[source])
     if check == "quarters_sum":
-        series["FY2025"] = Point(50, "USD millions", "fy", "2026-02-01")  # quarters sum to 46
+        series["FY2025"] = Point(50, "USD millions", "fy", "2026-02-01")
     else:
         series["2025Q3"] = Point(series["2025Q3"].value + 5, "USD millions", "x", "2026-05-01")
     p[source] = series
@@ -135,7 +133,7 @@ def test_split_basis_follows_the_latest_filing():
     assert eps["2025Q3"].value == pytest.approx(3.36)
     before = {"2025Q3": Point(33.0, "count millions", "a", old),
               "2025Q2": Point(32.6, "count millions", "b", old)}
-    datapack._split_basis(before, [25.0], "shares")  # an as-of before the split: unchanged
+    datapack._split_basis(before, [25.0], "shares")
     assert before["2025Q3"].value == 33.0
 
 
@@ -174,7 +172,7 @@ def test_temporary_equity_tagged_per_class_of_stock_is_summed():
                 {"start": None, "end": "2024-12-31", "dims": axis, "value": 180e6,
                  "filed": "2025-02-01", "id": "ixbrl:a:1"},
                 {"start": None, "end": "2024-12-31", "dims": axis, "value": 186e6,
-                 "filed": "2025-02-28", "id": "ixbrl:b:1"},  # the later copy wins
+                 "filed": "2025-02-28", "id": "ixbrl:b:1"},
                 {"start": None, "end": "2024-12-31", "dims": {datapack.CLASS_AXIS: "x:B",
                  "other": "y"}, "value": 1e9, "filed": "2025-02-28", "id": "no"},
             ]
@@ -182,4 +180,4 @@ def test_temporary_equity_tagged_per_class_of_stock_is_summed():
     series = {"2024Q3": Point(1.0, "USD millions", "q", "2024-11-01")}
     datapack._by_class(Facts(), "CART", ["TemporaryEquity"], series)
     assert series["2024Q4"].value == 186.0 and series["2024Q4"].id == "ixbrl:b:1"
-    assert series["2024Q3"].value == 1.0  # a reported value is kept
+    assert series["2024Q3"].value == 1.0

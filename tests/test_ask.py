@@ -1,5 +1,3 @@
-"""V4 Ask (tool set "ask"): data ids resolve and verify, and the data tools read as of the store."""
-
 from era_agent.agent.loop import build_system
 from era_agent.agent.tools import TOOL_SETS, Toolbox
 from era_agent.asof import AsOf
@@ -21,7 +19,7 @@ REVENUE = {"facts": {"us-gaap": {"Revenues": {"units": {"USD": [
 
 
 def ask(tmp_path, asof: str) -> Toolbox:
-    store = make_store(tmp_path)  # AAPL FY2025 10-K, filed 2025-10-31
+    store = make_store(tmp_path)
     store.enable_facts()
     store.add_extractions("AAPL", "2025Q3", "2025-07-31", [KPI], [GUIDE])
     store.add_facts(company_facts("AAPL", REVENUE, "2023-01-01"))
@@ -44,9 +42,9 @@ def test_data_ids_resolve_as_of_the_store(tmp_path):
     assert [v["value"] for v in guide.values] == [5, 7]
     assert resolver.resolve("q:AAPL:revenue:2025Q3").values[0]["value"] == 94.04e9
     assert resolver.resolve("px:AAPL:2025-11-03").values[0]["value"] == 100.0
-    assert resolver.resolve("px:AAPL:2025-11-04") is None  # published on the as-of date
+    assert resolver.resolve("px:AAPL:2025-11-04") is None
     assert Resolver(ask(tmp_path, "2025-07-31").store).resolve("kpi:AAPL:units:2025Q3") is None
-    assert resolver.resolve("0000320193-25-000079").filing["form"] == "10-K"  # from the store
+    assert resolver.resolve("0000320193-25-000079").filing["form"] == "10-K"
     assert Resolver(ask(tmp_path, "2025-10-31").store).resolve("0000320193-25-000079") is None
 
 
@@ -92,7 +90,7 @@ def test_ask_prompt_names_the_as_of_and_coverage(tmp_path):
 def test_decomposer_takes_years_without_a_fiscal_year_list(tmp_path, monkeypatch):
     from era_agent.retrieval import decompose
 
-    monkeypatch.setattr(decompose, "FISCAL_YEARS", None)  # V4 corpora list none
+    monkeypatch.setattr(decompose, "FISCAL_YEARS", None)
     store = ask(tmp_path, "2025-11-04").store
     assert decompose.slots(store, "Apple guidance for Q3 2026 and FY2025", ["AAPL"]) == [
         ("AAPL", [2025])

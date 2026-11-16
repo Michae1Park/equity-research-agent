@@ -1,12 +1,3 @@
-"""docs/V4_INTERFACES.md §4: every tool example matches what the tool returns.
-
-Each tool block in §4 has a JSON example {"as_of"?, "call", "result"}. The test runs the call
-on the V4 store at that as-of (default 2026-08-06) and checks the result's shape: the same keys
-at every level (lists compared on their first item), so a renamed, added or dropped field fails
-until the doc is updated. Values are not compared: rebuilds may move them. Skipped without the
-V4 store.
-"""
-
 import json
 import re
 from pathlib import Path
@@ -31,7 +22,6 @@ def examples() -> list[tuple[str, dict]]:
 
 
 def shape(value):
-    """Keys at every level; a list by its first item."""
     if isinstance(value, dict):
         return {k: shape(v) for k, v in value.items()}
     if isinstance(value, list):
@@ -55,14 +45,12 @@ def same_shape(doc, real, path="result") -> list[str]:
 def test_every_tool_has_an_example():
     from era_agent.agent.tools import TOOL_SETS
 
-    documented = {tool for tool, _ in examples()} | {"search_filings"}  # search: §3
+    documented = {tool for tool, _ in examples()} | {"search_filings"}
     assert set(TOOL_SETS["research"]) <= documented
 
 
 @pytest.fixture(scope="module")
 def v4_corpus():
-    """The V4 company list for this module; conftest.py pins V0–V3 for the rest. corpus.py
-    reads its file at import, so its globals are switched too, then restored."""
     from era_agent import corpus
 
     path = ROOT / "companies.yaml"

@@ -1,11 +1,3 @@
-"""The V4 modes behind the web UI, run one at a time (one GPU), each streaming its trace.
-
-Ask, Research and Investigate are chat modes: agents from the shared factory (as `era
-investigate` builds them). Report is the fixed S1–S11 pipeline (`era research report`). The
-core code is not changed: the trace comes from wrapping the model's `complete`, each agent's
-tool calls and runs, and the pipeline's Clock.step, for the length of one run.
-"""
-
 import json
 import threading
 import time
@@ -16,9 +8,9 @@ from pathlib import Path
 from era_agent import telemetry
 from era_agent.corpus import DATA_DIR
 
-RESULT_CHARS = 4000  # a tool result in the trace is cut to this many characters
+RESULT_CHARS = 4000
 
-_gpu = threading.Lock()  # one run at a time: chat and report share the model server
+_gpu = threading.Lock()
 _factory = None
 _factory_lock = threading.Lock()
 
@@ -30,7 +22,6 @@ def db_path() -> Path:
 
 
 def factory(settings: dict):
-    """The agent factory, built once (it loads the embedder and reranker)."""
     global _factory
     with _factory_lock:
         if _factory is None:
@@ -47,15 +38,13 @@ def _cut(value) -> object:
 
 
 class Cancelled(BaseException):
-    """The user stopped the run. BaseException: the agents' `except Exception` must not catch it."""
+    ...
 
 
 class Emitter:
-    """Events from a worker thread, kept so SSE responses can follow and re-attach."""
-
     def __init__(self):
         self.events_: list[dict] = []
-        self.log: list[dict] = []  # kept with the chat message, to replay the trace
+        self.log: list[dict] = []
         self.started = time.perf_counter()
         self.closed = False
         self.cancel = threading.Event()
@@ -82,14 +71,13 @@ class Emitter:
             raise Cancelled
 
     def events(self):
-        """Every event from the start, then new ones until the run ends."""
         i = 0
         while True:
             with self._cond:
                 while i >= len(self.events_) and not self.closed:
                     self._cond.wait(timeout=15)
                     if i >= len(self.events_) and not self.closed:
-                        break  # no event for 15 s: send a keep-alive
+                        break
                 batch, done = self.events_[i:], self.closed
             i += len(batch)
             yield from batch
@@ -100,7 +88,6 @@ class Emitter:
 
 
 def _trace_model(model, emit, scope: dict):
-    """Wrap model.complete: each turn's text and tool calls become events."""
     original = model.complete
 
     def complete(*args, **kwargs):
@@ -140,9 +127,6 @@ def _trace_tools(agent, emit, scope: dict):
 def chat(settings: dict, mode: str, question: str, as_of: str, emit: Emitter,
          chat_id: str | None = None, history: list[dict] | None = None,
          strategy: str = "none", budget: int = 100000) -> dict:
-    """One chat message in its mode → {"mode", "answer", "steps" | "investigation"}.
-    history: the chat's earlier answered turns (agent.history.turns); strategy: how they are
-    used (auto | append | rewrite | none); budget: auto's append limit in tokens."""
     from era_agent.agent.history import resolve, tokens
 
     history = history or []
@@ -234,15 +218,11 @@ def _chat(settings: dict, mode: str, question: str, as_of: str, emit: Emitter,
         _gpu.release()
 
 
-# --- Report mode -------------------------------------------------------------------------------
-
 STAGES = ["S2 events", "S3-S5 model and forecast", "S6-S7 peers and valuation", "S8 revisions",
           "S9 debates", "S7 sensitivities", "S10 write", "S11 export"]
 
 
 class Jobs:
-    """Report runs in background threads; their events are kept so a page can re-attach."""
-
     def __init__(self):
         self.jobs: dict[str, dict] = {}
         self.lock = threading.Lock()
@@ -337,7 +317,6 @@ class Jobs:
                                     "error", "created")}
 
     def follow(self, job: dict):
-        """Every event so far, then each new one, until the job ends."""
         i = 0
         while True:
             with job["cond"]:

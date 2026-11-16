@@ -26,7 +26,7 @@ BTS = ("https://data.bts.gov/resource/crem-w557.json?$select=date,"
        "u_s_airline_traffic_total_non_seasonally_adjusted,"
        "u_s_airline_traffic_domestic_non_seasonally_adjusted,"
        "u_s_airline_traffic_international_non_seasonally_adjusted&$order=date&$limit=5000")
-LICENSES = {"HV0003": "UBER", "HV0005": "LYFT"}  # confirmed on the first file
+LICENSES = {"HV0003": "UBER", "HV0005": "LYFT"}
 BTS_LAG_DAYS = 90
 AGENT = "era-agent research (crosscheck fetch)"
 
@@ -41,7 +41,6 @@ def months(since: str, until: date) -> list[str]:
 
 
 def fetch_tlc(raw: Path, since: str = "2023-01") -> list[str]:
-    """Aggregate every published month not cached yet; returns the months added."""
     import pyarrow.compute as pc
     import pyarrow.parquet as pq
 
@@ -56,7 +55,7 @@ def fetch_tlc(raw: Path, since: str = "2023-01") -> list[str]:
         try:
             response = urllib.request.urlopen(request, timeout=120)
         except urllib.error.HTTPError as e:
-            if e.code in (403, 404):  # not published yet
+            if e.code in (403, 404):
                 break
             raise
         published = parsedate_to_datetime(response.headers["Last-Modified"]).date().isoformat()
@@ -85,7 +84,6 @@ def fetch_bts(raw: Path) -> int:
 
 
 def rows(raw: Path) -> list[tuple[str, str, float, str]]:
-    """(series, date, value, published) for the market table."""
     out = []
     for path in sorted((raw / "crosscheck" / "tlc").glob("*.json")):
         d = json.loads(path.read_text())

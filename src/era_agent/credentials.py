@@ -1,13 +1,3 @@
-"""Your own data-source credentials: credentials.yaml (or ERA_CREDENTIALS), never committed.
-
-  era setup          type in your credentials; writes credentials.yaml (mode 600)
-
-Each one is read from its environment variable first (a .env file also works), then from the
-file. A credential that is missing, blank or still the example placeholder raises
-MissingCredential naming it and how to set it, so nothing runs with someone else's key or none.
-credentials.example.yaml is the committed template; credentials.yaml and .env are gitignored.
-"""
-
 import getpass
 import os
 import sys
@@ -20,7 +10,6 @@ from era_agent.config import load_dotenv
 PATH = Path("credentials.yaml")
 PLACEHOLDER = "REPLACE_ME"
 
-# name → (environment variable, what it is, where to get one)
 CREDENTIALS = {
     "sec_user_agent": ("SEC_USER_AGENT", "SEC EDGAR User-Agent: your name and email, "
                        "e.g. 'Jane Doe jane@example.com'",
@@ -45,7 +34,6 @@ def _usable(value) -> bool:
 
 
 def get(name: str) -> str:
-    """The credential's value, or MissingCredential with how to set it."""
     env, what, where = CREDENTIALS[name]
     load_dotenv()
     value = os.environ.get(env)
@@ -63,7 +51,6 @@ def get(name: str) -> str:
 
 
 def setup(file: Path | None = None) -> int:
-    """Prompt for every credential and write the file (owner read/write only)."""
     file = file or path()
     current = (yaml.safe_load(file.read_text()) or {}) if file.exists() else {}
     if not sys.stdin.isatty():

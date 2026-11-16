@@ -1,12 +1,3 @@
-"""V0 preprocessing: one 10-K's HTML → one structured document (sections, headings, tables).
-
-  step 1  rules: HTML → blocks with features            blocks.py
-  step 2  LLM structure agent: labels, validated and
-          repaired; assembled into the document         structure.py, validation.py
-
-Spec and results: experiments/V0_PARSING_CHUNKING.md §2. Spec: docs/stages/V0_PARSING_CHUNKING.md.
-"""
-
 import json
 import time
 from dataclasses import asdict
@@ -17,16 +8,12 @@ from era_agent.preprocess.structure import Labeler, assemble
 
 
 class StaleLabels(RuntimeError):
-    """labels.json was made with other labeling settings."""
+    ...
 
 
 def preprocess(
     html: Path, cover: Path, out: Path, llm: dict, labeling: dict, relabel: bool = False
 ) -> dict:
-    """HTML → blocks → labels → document, written to `out` as blocks.json, labels.json,
-    labels-log.json and document.json. The labels are cached: reused unless `relabel`, and
-    only if made with the same `labeling` settings. `cover` is the full filing, for the dei:
-    cover tags (the filing itself unless `html` is an excerpt). `llm`: {model, base_url}."""
     blocks = read_blocks(html.read_text(encoding="utf-8"))
     filing = cover_metadata(cover)
     out.mkdir(parents=True, exist_ok=True)

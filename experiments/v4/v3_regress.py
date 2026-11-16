@@ -1,17 +1,3 @@
-"""V3 byte identity for the V4 migration: one hash per part, compared with
-v3_baseline.txt after every change to shared code.
-
-  blocks, documents   re-derived from each V3 filing's cached LLM labels
-  violations          the structure validator over all labels
-  embedding texts     every chunk's and child's header + text
-  search, store       keyword and child search, filings, chunks(), get_chunk
-  claim check         every claim of the saved V3 runs re-verified
-  tools, system       the agent's tool schemas and system prompt per V3 tool set
-
-  uv run python -W ignore experiments/v4/v3_regress.py \
-    | diff experiments/v4/v3_baseline.txt -
-"""
-
 import hashlib
 import json
 import os

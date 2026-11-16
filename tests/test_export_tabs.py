@@ -1,5 +1,3 @@
-"""Workbook DCF and Model (prior) tabs (research/export/report.py, spec §2.3)."""
-
 import shutil
 import subprocess
 from pathlib import Path

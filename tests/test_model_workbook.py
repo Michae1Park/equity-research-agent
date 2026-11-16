@@ -1,6 +1,3 @@
-"""The Model tab (research/export/workbook.py) and its parity test: LibreOffice recalculates the
-workbook and every formula cell must equal Python's value."""
-
 import shutil
 
 import pytest
@@ -19,8 +16,8 @@ def test_inputs_are_blue_values_formulas_black(templates, tmp_path):  # noqa: F8
     assert revenue.comment.text.startswith("id:2025Q1")
     take_rate = sheet.cell(rows["take rate"], first)
     assert take_rate.value == f"=C{rows['revenue']}/C{rows['gross bookings']}"
-    assert sheet.cell(rows["gb growth"], first).value is None  # its lag reaches before the data
-    gb = rows["gross bookings"]  # 2026Q1 is column H; four quarters back skips FY2025 (G)
+    assert sheet.cell(rows["gb growth"], first).value is None
+    gb = rows["gross bookings"]
     assert sheet.cell(rows["gb growth"], first + 5).value == f"=(H{gb}/C{gb})-1"
     revenue_row = rows["revenue"]
     assert sheet.cell(revenue_row, first + 4).value == f"=SUM(C{revenue_row}:F{revenue_row})"

@@ -1,27 +1,3 @@
-"""Layer-2 integrity checks on a built model (V4 design doc §6.2). Any FAIL stops the run.
-
-  balance          assets = liabilities + mezzanine + equity, and assets = the reported
-                   liabilities-and-equity total, every period, within $1M
-  quarters_sum     the model's FY column (its quarters summed) = the reported fiscal year
-  q4_ties          derived Q4 + 9M = the 10-K's FY (facts/quarters.py, per XBRL flow line)
-  take_rate        each take rate recomputes from the reported revenue and gross bookings
-  segments_sum     segment lines sum to the reported total (template `sums`)
-  no_future_input  every input was filed before the as-of
-  formula_only     forecast cells are formulas: no input or default in a forecast column (a line
-                   without a forecast rule, the balance-sheet detail, is blank)
-
-History checks test the reported columns: quarters before the forecast and FY columns of years
-with no forecast quarter.
-
-A check that has nothing to test in a period (an input missing) skips it and counts the skip;
-the skips and the model's other gaps are listed as exceptions, never hidden.
-
-Valuation checks (Report, after S7; any FAIL stops the run as well):
-  wacc_gt_g        the WACC (one for all scenarios) exceeds the terminal growth, which a
-                   Gordon terminal value needs
-  weights          scenario weights and the multiple/DCF valuation weights each sum to 1
-"""
-
 from dataclasses import asdict, dataclass, field
 
 from era_agent.facts import quarters as xbrl_quarters
@@ -29,21 +5,20 @@ from era_agent.research.datapack import Point
 from era_agent.research.model.graph import Model, load_template
 from era_agent.store import Store
 
-TOLERANCE = 1.0  # USD millions: figures printed in whole millions
+TOLERANCE = 1.0
 
 
 @dataclass
 class Check:
     name: str
-    status: str  # pass, fail, skip
-    tested: int = 0  # periods or lines tested
+    status: str
+    tested: int = 0
     failures: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     note: str = ""
 
 
 def run(model: Model, pack: dict[str, dict[str, Point]], store: Store | None) -> list[Check]:
-    """Every check; q4_ties reads the XBRL facts, so it needs the store."""
     _, template = load_template(model.template, model.ticker)
     return [
         balance(model), quarters_sum(model, pack, store),
@@ -54,8 +29,6 @@ def run(model: Model, pack: dict[str, dict[str, Point]], store: Store | None) ->
 
 
 def exceptions(model: Model, checks: list[Check]) -> list[dict]:
-    """What the model lacks or assumed: defaults used, inputs missing, points rescaled for a
-    split, periods a check skipped. Severity `info`; a failed check is `error`."""
     out = [{"severity": "info", "item": f"default used: {d}"} for d in model.defaults]
     for line in model.lines:
         missing = [c for c in model.quarters
@@ -72,7 +45,6 @@ def exceptions(model: Model, checks: list[Check]) -> list[dict]:
 
 
 def _reported(model: Model) -> list[str]:
-    """History columns: quarters before the forecast, FY columns of fully reported years."""
     years = {q[:4] for q in model.forecast}
     return [c for c in model.columns if c not in model.forecast
             and not (c.startswith("FY") and c[2:] in years)]
@@ -99,8 +71,6 @@ def balance(model: Model) -> Check:
 
 
 def quarters_sum(model: Model, pack, store: Store | None = None) -> Check:
-    """A recast year (restated quarters beside an original FY: TRIP's 2025 moved to
-    continuing operations) is on two bases and is skipped, marked as such (needs the store)."""
     specs = xbrl_quarters.metrics()
     tested, failures, skipped = 0, [], []
     for line in model.lines:
@@ -126,7 +96,6 @@ def quarters_sum(model: Model, pack, store: Store | None = None) -> Check:
 
 
 def q4_ties(model: Model, store: Store) -> Check:
-    """facts/quarters.py's q4_ties per XBRL flow line the model reads."""
     specs = xbrl_quarters.metrics()
     tested, failures, skipped = 0, [], []
     for line in model.lines:
@@ -144,18 +113,16 @@ def q4_ties(model: Model, store: Store) -> Check:
             elif result["status"] == "fail":
                 tested += 1
                 failures.append(f"{metric} {result['period']}: off by {result['gap'] / 1e6:,.1f}")
-            else:  # restated: the year was recast, its quarters come from different filings
+            else:
                 skipped.append(f"{metric} {result['period']} (recast)")
     return _result("q4_ties", tested, failures, skipped)
 
 
 def take_rate(model: Model, pack) -> Check:
-    """Every `take_rate*` line against reported revenue / gross bookings read straight from
-    the data pack (catches a template wired to the wrong series)."""
     tested, failures, skipped = 0, [], []
     for line in model.lines:
         if not line.name.startswith("take_rate") or line.name.endswith("_shift"):
-            continue  # the forecast's take_rate…_shift lines are changes, not rates
+            continue
         suffix = line.name[len("take_rate"):]
         top, bottom = model.line(f"revenue{suffix}"), model.line(f"gross_bookings{suffix}")
         for column in model.history:
@@ -172,8 +139,6 @@ def take_rate(model: Model, pack) -> Check:
 
 
 def segments_sum(model: Model, sums: dict[str, list]) -> Check:
-    """A total's parts: one list, or alternatives (segments redrawn) of which the first fully
-    reported in a period is tested."""
     tested, failures, skipped = 0, [], []
     for total, parts_spec in sums.items():
         options = parts_spec if parts_spec and isinstance(parts_spec[0], list) else [parts_spec]
@@ -185,7 +150,7 @@ def segments_sum(model: Model, sums: dict[str, list]) -> Check:
                 skipped.append(f"{total} {column}")
                 continue
             values = [model.value(p, column) for p in parts]
-            slack = max(TOLERANCE, 0.5 * len(parts))  # each part rounded to the million
+            slack = max(TOLERANCE, 0.5 * len(parts))
             tested += 1
             if abs(sum(values) - reported) > slack:
                 failures.append(f"{total} {column}: parts {sum(values):,.1f} vs {reported:,.1f}")
@@ -203,7 +168,6 @@ def no_future_input(model: Model) -> Check:
 
 
 def formula_only(model: Model) -> Check:
-    """No input or default in a forecast column."""
     failures = [f"{line} {column}" for (line, column), cell in model.cells.items()
                 if column in model.forecast and cell.kind in ("input", "default")]
     tested = sum(1 for (_, c), cell in model.cells.items()

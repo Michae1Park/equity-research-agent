@@ -1,5 +1,3 @@
-"""Evaluation: gold questions (validation, sign-off, evidence → chunks) and retrieval metrics."""
-
 from datetime import date
 
 from era_agent.evaluation import gold

@@ -1,20 +1,3 @@
-"""The web UI's API (`era serve`): chat in Ask, Research or Investigate mode, Reports, sources.
-
-  POST /api/chat                 {chat_id?, mode, question, as_of} → SSE trace, then "done"
-  GET  /api/chats[/{id}]         saved chats (output/web/chats/<id>.json); DELETE removes one
-  GET  /api/chats/{id}/live      SSE: the running question's trace from the start (re-attach)
-  POST /api/chats/{id}/cancel    stop the running question at its next model or tool call
-  GET  /api/sources/{id}         a cited chunk or XBRL fact
-  GET  /api/companies            the V4 coverage
-  GET  /api/reports              saved report runs (output/reports/<T>/<as-of>/report.json)
-  GET  /api/reports/{T}/{as_of}  one report: summary, note, exceptions, versions
-  GET  /api/reports/{T}/{as_of}/files/{name}   workbook.xlsx, note.pdf, note.md
-  POST /api/reports              {ticker, as_of, llm, resume} → a job; /api/jobs/{id}/events SSE
-  POST /api/jobs/{id}/cancel     stop a report run before its next stage or LLM call
-  DELETE /api/jobs/{id}          forget a finished, failed or cancelled run
-  POST /api/reports/approve      {version, by}
-"""
-
 import json
 import re
 import threading
@@ -56,7 +39,7 @@ class ChatIn(BaseModel):
     mode: str
     question: str
     as_of: str
-    history: str | None = None  # auto | append | rewrite | none; default: config chat.history
+    history: str | None = None
 
 
 class ReportIn(BaseModel):
@@ -75,7 +58,7 @@ def create_app(settings: dict) -> FastAPI:
     app = FastAPI(title="era")
     jobs = engine.Jobs()
     chat_lock = threading.Lock()
-    running: dict[str, engine.Emitter] = {}  # chat id → its running question
+    running: dict[str, engine.Emitter] = {}
     CHATS.mkdir(parents=True, exist_ok=True)
 
     def load_chat(chat_id: str) -> dict:
@@ -89,7 +72,6 @@ def create_app(settings: dict) -> FastAPI:
         chat["updated"] = time.time()
         (CHATS / f"{chat['id']}.json").write_text(json.dumps(chat, indent=1, default=str))
 
-    # --- chat ------------------------------------------------------------------------------
 
     @app.post("/api/chat")
     def chat(body: ChatIn):
@@ -121,7 +103,7 @@ def create_app(settings: dict) -> FastAPI:
                 result = engine.chat(settings, body.mode, body.question, body.as_of, emit,
                                      record["id"], earlier, strategy,
                                      chat_config.get("append_budget", 100000))
-                result.pop("steps", None)  # the trace below holds them
+                result.pop("steps", None)
                 message = {"role": "assistant", "time": time.time(), **result,
                            "trace": emit.log}
                 emit("done", chat_id=record["id"], message=message)
@@ -135,7 +117,7 @@ def create_app(settings: dict) -> FastAPI:
                 emit("error", chat_id=record["id"], message=message)
             with chat_lock:
                 running.pop(record["id"], None)
-                if (CHATS / f"{record['id']}.json").exists():  # not deleted meanwhile
+                if (CHATS / f"{record['id']}.json").exists():
                     saved = load_chat(record["id"])
                     saved["messages"].append(message)
                     save_chat(saved)
@@ -188,7 +170,6 @@ def create_app(settings: dict) -> FastAPI:
         (CHATS / f"{chat_id}.json").unlink()
         return {"ok": True}
 
-    # --- sources and coverage -------------------------------------------------------------
 
     @app.get("/api/sources/{source_id}")
     def source(source_id: str):
@@ -208,7 +189,7 @@ def create_app(settings: dict) -> FastAPI:
                 return {"kind": "fact", "id": source_id, "fact": fact}
             from era_agent.research.refs import Resolver
 
-            found = Resolver(store).resolve(source_id)  # q:, kpi:, guide:, px:, macro:, cc:
+            found = Resolver(store).resolve(source_id)
             if found and found.values:
                 return {"kind": "data", "id": source_id, "ref_kind": found.ref.kind,
                         "values": found.values, "detail": found.extra}
@@ -220,7 +201,6 @@ def create_app(settings: dict) -> FastAPI:
     def companies():
         return [{"ticker": c.ticker, "name": c.name} for c in COMPANIES]
 
-    # --- reports --------------------------------------------------------------------------
 
     def versions(ticker: str) -> list[dict]:
         from era_agent.asof import AsOf
@@ -259,7 +239,7 @@ def create_app(settings: dict) -> FastAPI:
                 "note": note.read_text() if note.exists() else "",
                 "files": sorted(f for f in FILES if (folder / f).exists()),
                 "versions": versions(ticker),
-                "generated": (folder / "report.json").stat().st_mtime}  # when this run was saved
+                "generated": (folder / "report.json").stat().st_mtime}
 
     @app.get("/api/reports/{ticker}/{as_of}/files/{name}")
     def report_file(ticker: str, as_of: str, name: str):
@@ -315,7 +295,6 @@ def create_app(settings: dict) -> FastAPI:
         store.set_version_status(body.version, f"reviewed by {body.by} on {date.today()}")
         return {"ok": True, "versions": store.model_versions(ticker)}
 
-    # --- the built UI (ui/dist), when present ---------------------------------------------
 
     dist = Path(__file__).resolve().parents[3] / "ui" / "dist"
     if dist.exists():

@@ -17,7 +17,6 @@ COMPANY = Company("TEST", 12345, "Test Corp")
 
 
 def page(*rows):
-    """Build a submissions page from (form, accession, filing_date, report_date) rows."""
     return {
         "form": [r[0] for r in rows],
         "accessionNumber": [r[1] for r in rows],
@@ -64,7 +63,6 @@ def test_fiscal_years_come_from_10k_public_float_facts():
 
 
 def test_resolve_prefers_xbrl_fiscal_year_over_period_end():
-    # A January year-end labeled as the prior year, like some retailers.
     subs = submissions(("10-K", "a-1", "2025-03-20", "2025-02-01"))
     [filing] = resolve_filings(COMPANY, subs, company_facts({"a-1": 2024}), (2024,))
     assert filing.fiscal_year == 2024
@@ -111,13 +109,10 @@ def test_fetch_records_filings_and_skips_failed_companies(tmp_path, monkeypatch)
     assert manifest["TEST"][0]["accession_no"] == "a-1"
 
 
-# --- companies verify (V4) --------------------------------------------------------------------
-
 from era_agent.acquisition.companies import counts, filing_rows, verify_company  # noqa: E402
 
 
 def filings_page(*rows):
-    """A submissions page from (form, accession, filing_date, items) rows."""
     return {
         "form": [r[0] for r in rows],
         "accessionNumber": [r[1] for r in rows],
@@ -148,7 +143,7 @@ def test_verify_company_flags_fye_cik_and_missing_forms():
     subs = {"name": "X", "exchanges": ["NYSE"], "fiscalYearEnd": "0630"}
     entry, problems = verify_company("X", {"cik": 1}, 2, subs, [page_], "2023-01-01")
     assert entry["cik"] == 2 and entry["verified"]["filings"]["10-K"] == 1
-    assert len(problems) == 3  # CIK mismatch, FYE, no 10-Q
+    assert len(problems) == 3
 
 
 def test_verify_company_reports_unknown_ticker():

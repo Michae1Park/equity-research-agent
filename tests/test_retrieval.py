@@ -33,8 +33,6 @@ class FakeEmbedder:
 
 
 class FakeReranker:
-    """Scores by the words a text shares with the query."""
-
     name = "fake"
 
     def scores(self, query, texts):

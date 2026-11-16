@@ -1,19 +1,3 @@
-"""Telemetry: every run, LLM call and tool call, with full payloads, in one SQLite file.
-
-The data is for improving the agent later (failure analysis, eval and fine-tuning sets), so
-nothing is cut. Writes never raise: a telemetry failure must not break a run.
-
-    runs       one chat turn or report run: input, output, status, error, timings
-    llm_calls  one `Model.complete`: messages, tools, system, reply, tokens, latency, cost, error
-    tool_calls one `Toolbox.call`: name, arguments, result, error, duration
-
-LLM and tool calls made inside `run(...)` carry its id (and the sub-agent `scope`, if any);
-calls outside a run (CLI, evaluation) are logged with run_id NULL.
-
-    ERA_TELEMETRY=0          turn it off
-    ERA_TELEMETRY_DB=<path>  default data/telemetry.db
-"""
-
 import contextvars
 import dataclasses
 import functools
@@ -100,9 +84,6 @@ def _error(e: BaseException) -> str:
     return f"{type(e).__name__}: {e}\n{''.join(traceback.format_tb(e.__traceback__))}"
 
 
-# --- Runs ----------------------------------------------------------------------------------
-
-
 class Run:
     def __init__(self, run_id: str):
         self.id = run_id
@@ -115,7 +96,6 @@ class Run:
 
 @contextmanager
 def run(kind: str, input=None, mode: str | None = None, chat_id: str | None = None, **meta):
-    """One chat turn or report run; LLM and tool calls inside it are linked to it."""
     r = Run(uuid.uuid4().hex)
     started = time.time()
     _write("INSERT INTO runs (id, kind, mode, chat_id, input, status, started, meta) "
@@ -138,7 +118,6 @@ def run(kind: str, input=None, mode: str | None = None, chat_id: str | None = No
 
 @contextmanager
 def scope(name: str | None):
-    """A sub-agent within a run (Investigate's sub-questions)."""
     token = _scope.set(name)
     try:
         yield
@@ -146,12 +125,7 @@ def scope(name: str | None):
         _scope.reset(token)
 
 
-# --- Calls ---------------------------------------------------------------------------------
-
-
 def logged_complete(complete):
-    """Decorates a Model.complete: logs the request, the reply or the error."""
-
     @functools.wraps(complete)
     def wrapper(self, messages, tools=None, system=None, max_tokens=8000, tool_choice=None):
         started = time.monotonic()
@@ -179,8 +153,6 @@ def logged_complete(complete):
 
 
 def logged_tool(call):
-    """Decorates a Toolbox.call: logs arguments, result, and errors (returned or raised)."""
-
     @functools.wraps(call)
     def wrapper(self, name, arguments):
         started = time.monotonic()

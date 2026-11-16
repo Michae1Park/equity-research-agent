@@ -1,5 +1,3 @@
-"""Rule-based structure for 10-Qs and releases (preprocess/rules.py)."""
-
 from era_agent.preprocess.blocks import Block
 from era_agent.preprocess.forms import RELEASE, TEN_Q
 from era_agent.preprocess.rules import label_blocks, label_release, release_blocks
@@ -15,13 +13,13 @@ def roles(labels):
 
 def test_ten_q_items_carry_their_part_and_skip_toc_links():
     blocks = [
-        para(1, "Item 2. MD&A", link=True),  # table of contents
+        para(1, "Item 2. MD&A", link=True),
         para(2, "PART I - FINANCIAL INFORMATION"),
         para(3, "Item 1. Financial Statements"),
         para(4, "Revenue grew.", emph="-"),
-        para(5, "I tem 2. Management's Discussion"),  # TRIP's split initial
-        para(6, "Part II. Item 1A. Risk Factors"),  # EXPE: Part and Item on one line
-        para(7, "Item 1. Financial Statements"),  # backwards: not a new section
+        para(5, "I tem 2. Management's Discussion"),
+        para(6, "Part II. Item 1A. Risk Factors"),
+        para(7, "Item 1. Financial Statements"),
     ]
     assert roles(label_blocks(blocks, TEN_Q)) == [
         ("body", None),
@@ -62,8 +60,8 @@ def test_ten_k_quirks_and_statement_headings():
     from era_agent.preprocess.forms import TEN_K
 
     blocks = [
-        para(1, "Ite m 1A. Risk Factors"),  # TRIP
-        para(2, "Part III. Item 10. Directors", emph="-"),  # EXPE: not bold, Part on the line
+        para(1, "Ite m 1A. Risk Factors"),
+        para(2, "Part III. Item 10. Directors", emph="-"),
         para(3, "CONSOLIDATED BALANCE SHEETS"),
         para(4, "Report of Independent Registered Public Accounting Firm"),
     ]

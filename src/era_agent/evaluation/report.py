@@ -1,9 +1,3 @@
-"""A finished V2 run as a Markdown report: one table per kind of answer, with each question's
-expected answer, retrieval scores (Recall@k, reciprocal rank of the first gold chunk) and
-verdict. The retrieval scores are computed here from the chunks the model was shown, so the
-report is end to end: retrieval, then the answer.
-"""
-
 from era_agent.evaluation import gold as gold_set
 from era_agent.evaluation.retrieval_metrics import gold_chunks, recall_at, reciprocal_rank
 from era_agent.evaluation.scoring import summarize
@@ -22,8 +16,6 @@ def build_report(
     context: str = "retrieved",
     at: tuple[int, ...] = RECALL_AT,
 ) -> str:
-    """`rows`: a run's results.json; `context`: which of its contexts to report (the end-to-end
-    one is `retrieved`: V1's own top k)."""
     by_id = {q["id"]: q for q in questions}
     rows = [r for r in rows if r["context"] == context and r["id"] in by_id]
     groups = {
@@ -127,8 +119,6 @@ def _decline_table(rows: list[dict], by_id: dict) -> str:
 
 
 def _sources(q: dict, store: Store) -> str:
-    """Where in the filings the answer is, to cross-check it: company and year (linked to the
-    filing), Item and the printed page of the chunk holding each source's evidence quote."""
     sources = q.get("sources", [])
     resolved = gold_set.resolve_evidence(store, q)[: len(sources)]
     lines = []
@@ -144,7 +134,6 @@ def _sources(q: dict, store: Store) -> str:
 
 
 def _pages(chunk) -> str | None:
-    """'p. 48' or 'pp. 48–49': the numbers printed on the pages, else the document's page."""
     if chunk is None:
         return None
     pages, prefix = (chunk.printed_pages, "") if chunk.printed_pages else (chunk.pages, "PDF ")

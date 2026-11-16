@@ -1,5 +1,3 @@
-"""The V3 agent loop with a scripted model: tool routing, the budget, the JSON retry."""
-
 import json
 
 from era_agent.agent.loop import ANSWER_NOW, Agent
@@ -25,8 +23,6 @@ XBRL = {"company": "AAPL", "concept": "ResearchAndDevelopmentExpense", "fiscal_y
 
 
 class Scripted:
-    """Replies in order: a list of tool calls, or text."""
-
     name = "scripted"
 
     def __init__(self, replies):
@@ -56,7 +52,7 @@ def test_tool_results_feed_the_next_turn_and_the_answer_is_verified(tmp_path):
     tool_message = model.seen[1][0][-1]
     assert tool_message["role"] == "tool" and FACT in tool_message["content"]
     assert run.answer["claims"][0]["status"] == "verified"
-    assert model.seen[0][1] == "required"  # the first turn must call a tool
+    assert model.seen[0][1] == "required"
 
 
 def test_calls_past_the_budget_error_and_the_model_must_answer(tmp_path):
@@ -94,17 +90,15 @@ def test_a_repeated_call_returns_an_error_and_still_counts(tmp_path):
 def test_a_long_conversation_must_answer_with_tools_off(tmp_path):
     call = [("calculator", {"op": "sum", "inputs": {"a": 1}})]
     run_agent, model = agent(tmp_path, [call, json.dumps(ANSWER)], max_context=10)
-    run = run_agent.run("q")  # the scripted model reports 10 input tokens per turn
+    run = run_agent.run("q")
     assert model.seen[1][1] == "none" and run.stop == "budget"
 
 
 def test_tool_results_are_cut_to_the_context_left(tmp_path):
-    """The context check counts results added since the last turn: a large result is cut to
-    the room left and the next turn must answer, instead of overflowing the model."""
     big = [("calculator", {"op": "sum", "inputs": {f"x{i}": i for i in range(400)}})]
     run_agent, model = agent(tmp_path, [big, json.dumps(ANSWER)], max_context=200)
-    run = run_agent.run("q")  # 15 tokens used: room for about 555 characters
-    content = model.seen[1][0][-2]["content"]  # the tool result, before the "answer now" turn
+    run = run_agent.run("q")
+    content = model.seen[1][0][-2]["content"]
     assert content.endswith("answer from what you have)") and len(content) < 700
     assert model.seen[1][1] == "none" and run.stop == "budget"
 
@@ -135,4 +129,4 @@ def test_context_cap_follows_server_window():
     assert context_cap(model(32768), 180000, 4000) == 32768 - 4000 - 4096
     assert context_cap(model(200000), 180000, 4000) == 171000
     assert context_cap(model(None), 180000, 4000) == 180000
-    assert context_cap(SimpleNamespace(), 20000, 4000) == 20000  # Claude, fakes
+    assert context_cap(SimpleNamespace(), 20000, 4000) == 20000

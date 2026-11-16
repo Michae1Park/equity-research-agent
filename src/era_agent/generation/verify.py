@@ -1,26 +1,3 @@
-"""Deterministic checks that a claim's number appears in a chunk it cites, units normalized.
-
-Run over every claim of every answer (answers.finalize):
-- a reported number is *verified* when a cited chunk contains it;
-- a calculated number is *calculated* when re-running its calculation reproduces it and
-  each input is found in a cited chunk;
-- a claim without a number is *cited* when its chunk IDs exist;
-- anything else is *unverified*, and shown as such rather than hidden.
-
-On a parent-child database a number is also checked against the company: a claim about MSFT
-citing only AAPL chunks that show its value is unverified.
-
-V3: a claim may also cite XBRL facts by their `xbrl:` id; a value equal to a cited
-fact of the claim's company is verified too, and calculation inputs may come from them. The
-facts are read from the SEC cache (`sec`), never fetched. A claim about a filing (a date, a
-form) may cite its accession number, checked against the cached EDGAR submissions.
-
-V4: ids are parsed and resolved by research/refs.py, one grammar for every source kind. Data
-ids (q:, kpi:, guide:, px:, macro:) work as XBRL facts do: a value equal to a cited row of the
-claim's company is verified, and calculation inputs may come from them; percentages and other
-unscaled units compare as written.
-"""
-
 import re
 from dataclasses import dataclass
 
@@ -38,7 +15,7 @@ SCALES = {
     "count thousands": 1e3,
     "count millions": 1e6,
     "shares millions": 1e6,
-    "usd per share": 1.0,  # per-share amounts are in plain dollars (EPS)
+    "usd per share": 1.0,
     "usd/share": 1.0,
     "usd/shares": 1.0,
 }
@@ -53,9 +30,9 @@ CHUNK_UNITS = re.compile(r"in (thousands|millions|billions)", re.IGNORECASE)
 
 @dataclass
 class Number:
-    value: float  # as displayed, sign from parentheses
+    value: float
     decimals: int
-    scale: float | None  # from a trailing word ("billion"); None when the context decides
+    scale: float | None
     percent: bool
     span: str
 
@@ -82,36 +59,27 @@ def numbers_in(text: str) -> list[Number]:
 
 
 def unit_scale(unit: str | None) -> float | None:
-    """Absolute scale of a unit ('USD millions' -> 1e6); None for percentages or unknown."""
     if not unit:
         return None
     return SCALES.get(unit.strip().lower())
 
 
 def chunk_scales(chunk: ChunkRecord) -> list[float]:
-    """Candidate scales for bare numbers in a chunk: its stated units, else every scale."""
     stated = chunk.units or (m.group(0) if (m := CHUNK_UNITS.search(chunk.text)) else None)
     if stated:
-        # "in millions, except per-share amounts" is millions; "net income in millions and
-        # shares in thousands" is both
         words = re.findall(r"\b(thousand|million|billion|trillion)s?\b", stated.lower())
         return [*dict.fromkeys(WORD_SCALES[w] for w in words), 1.0]
     return [1.0, 1e3, 1e6, 1e9]
 
 
 def find_value(value, unit: str | None, chunk: ChunkRecord) -> str | None:
-    """The span in the chunk showing this value (after unit normalization), or None.
-
-    Two numbers match when they agree to the precision either one is written with:
-    "$31.4 billion" matches 31,370 (in millions), but 31,500 doesn't.
-    """
     claimed = _as_float(value)
     if claimed is None:
         return None
     is_percent = (unit or "").lower() in ("percent", "%")
     claim_scale = unit_scale(unit)
     if is_percent or claim_scale is None:
-        claim_scale = None  # percentages and unknown units compare as displayed
+        claim_scale = None
     claim_rounding = _rounding(_decimals(value), claim_scale or 1.0)
     for number in numbers_in(chunk.text):
         if claim_scale is None:
@@ -132,18 +100,15 @@ def find_value(value, unit: str | None, chunk: ChunkRecord) -> str | None:
 
 
 def _rounding(decimals: int, scale: float) -> float:
-    """Half a unit in the last written digit: 1.2 billion -> ±0.05 billion."""
     return 0.5 * 10**-decimals * scale
 
 
 def _close(target: float, shown: float, shown_rounding: float, claim_rounding: float) -> bool:
-    slack = max(shown_rounding, claim_rounding) + 1e-9 * max(abs(target), 1.0)  # float noise
+    slack = max(shown_rounding, claim_rounding) + 1e-9 * max(abs(target), 1.0)
     return abs(target - shown) <= slack
 
 
 def verify_claim(claim: dict, store: Store, sec: FactSource | None = None, book=None) -> dict:
-    """Set a claim's status (verified / calculated / cited / unverified) and the reason.
-    `book`: Research mode's model book, for model: ids (research/book.py)."""
     ids = claim.get("chunk_ids") or []
     resolver = Resolver(store, sec, book)
     resolved = {i: resolver.resolve(i) for i in ids}
@@ -170,11 +135,9 @@ def verify_claim(claim: dict, store: Store, sec: FactSource | None = None, book=
 
     direct = _direct(claim, chunks, found_facts, store, found_data) if value is not None else None
     if calculation:
-        # Inputs may be any company's cited facts: a comparison's calculation spans companies.
         all_facts = [(i, f) for i, f in facts if f] + [(i, _whole(v)) for i, v in data if _whole(v)]
         status, reason = _check_calculation(claim, calculation, chunks, all_facts)
         if status == "unverified" and direct and direct[0] == "verified":
-            # A value the sources show as is, with a needless calculation (a unit conversion).
             status, reason = direct
     elif value is not None and _as_float(value) is None:
         status, reason = "unverified", f"value {value!r} is not a number"
@@ -185,33 +148,28 @@ def verify_claim(claim: dict, store: Store, sec: FactSource | None = None, book=
     else:
         status, reason = "unverified", "no valid citation"
 
-    if missing:  # a cited id that doesn't resolve leaves the claim unverified
+    if missing:
         status = "unverified"
         reason = (reason + "; " if reason else "") + f"unknown id {missing}"
     return claim | {"status": status, "status_reason": reason}
 
 
 def _group(ref_id: str) -> str:
-    """How the claim check counts an id: an XBRL fact (malformed ones too), a filing, a data
-    row, or a chunk (every other kind, until its data is built)."""
     if ref_id.startswith("xbrl:"):
         return "xbrl"
     kind = parse(ref_id).kind
     return "accession" if kind == "accession" else "data" if kind in DATA else "chunk"
 
 
-WHOLE = {"usd": 1.0, "usd/shares": 1.0, "shares": 1.0}  # XBRL-derived quarters' units
+WHOLE_UNIT_SCALES = {"usd": 1.0, "usd/shares": 1.0, "shares": 1.0}
 
 
 def _whole(row: dict) -> dict | None:
-    """A data row in whole units, as fact_matches reads facts; None for unscaled units."""
-    scale = unit_scale(row["unit"]) or WHOLE.get(row["unit"].strip().lower())
+    scale = unit_scale(row["unit"]) or WHOLE_UNIT_SCALES.get(row["unit"].strip().lower())
     return row | {"value": row["value"] * scale} if scale else None
 
 
 def data_matches(value, unit: str | None, row: dict) -> bool:
-    """A claimed value equals a data row: by scale, or as written when neither unit scales
-    (percent, percentage points, a macro series' own unit)."""
     whole = _whole(row)
     if whole:
         return fact_matches(value, unit, whole)
@@ -222,7 +180,6 @@ def data_matches(value, unit: str | None, row: dict) -> bool:
 
 
 def _direct(claim: dict, chunks: list[ChunkRecord], facts: list, store: Store, data=()):
-    """(status, reason) for a value read straight from the cited chunks, facts or data rows."""
     value, unit = claim.get("value"), claim.get("unit")
     row = next((i for i, v in data if data_matches(value, unit, v)), None)
     if row:
@@ -240,8 +197,6 @@ def _direct(claim: dict, chunks: list[ChunkRecord], facts: list, store: Store, d
 
 
 def fact_matches(value, unit: str | None, fact: dict) -> bool:
-    """A claimed value equals an XBRL fact, to the precision the claim is written with
-    (facts are in whole units: USD, shares)."""
     claimed = _as_float(value)
     scale = unit_scale(unit)
     if claimed is None or scale is None:
@@ -251,8 +206,6 @@ def fact_matches(value, unit: str | None, fact: dict) -> bool:
 
 
 def _lineage_conflict(claim: dict, chunks: list[ChunkRecord], store: Store) -> str | None:
-    """Why the chunks showing a claim's value don't support its company, or None. Only on a
-    parent-child database."""
     if not chunks or not store.has_children():
         return None
     company = resolve_company(str(claim.get("company") or ""))
@@ -265,18 +218,16 @@ def _check_calculation(
     claim: dict, calculation: dict, chunks: list[ChunkRecord], facts: list[tuple[str, dict]] = ()
 ):
     op = calculation.get("op")
-    op = None if op == "expression" else op  # the mode's name written as the op (the agent's)
+    op = None if op == "expression" else op
     try:
         result = calculate(op, calculation.get("expression"), calculation.get("inputs"))
-    except (CalculatorError, AttributeError, TypeError) as e:  # model-written, may be malformed
+    except (CalculatorError, AttributeError, TypeError) as e:
         return "unverified", f"calculation does not run: {e}"
     value = claim.get("value")
     if value is not None and _as_float(value) is None:
         return "unverified", f"value {value!r} is not a number"
-    # A percentage may come from a ratio: 8.3 percent from numerator / denominator = 0.083.
     percent = (claim.get("unit") or "").lower() in ("percent", "%")
     results = [result.result, result.result * 100] if percent else [result.result]
-    # A sum or difference in the inputs' unit, claimed in another (USD millions -> USD).
     scale_in, scale_out = unit_scale(calculation.get("input_unit")), unit_scale(claim.get("unit"))
     if not percent and scale_in and scale_out and scale_in != scale_out:
         results.append(result.result * scale_in / scale_out)
@@ -308,7 +259,6 @@ def _as_float(value) -> float | None:
 
 
 def _decimals(value) -> int:
-    """Digits after the point, as written (31370.0 from JSON counts as an integer)."""
     if isinstance(value, float) and value.is_integer():
         return 0
     text = str(value).replace(",", "").replace("%", "").strip()

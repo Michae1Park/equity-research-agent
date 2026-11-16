@@ -1,9 +1,3 @@
-"""The LLM judge: one fixed model (experiments/v2/config.yaml), whatever model is under test.
-
-Numbers are never judged by the LLM; they're scored deterministically. The judge scores only
-what has no deterministic check: whether a text answer covers its required points.
-"""
-
 from dataclasses import dataclass
 
 from era_agent.models import Model, parse_json
@@ -17,7 +11,6 @@ class Judge:
     model: Model
 
     def points_covered(self, question: str, points: list[str], answer: str) -> list[bool]:
-        """Per required point, whether the answer covers it."""
         prompt = (
             PROMPT.read_text()
             .strip()

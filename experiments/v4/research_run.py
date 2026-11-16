@@ -33,9 +33,9 @@ from era_agent.evaluation import gold
 from era_agent.models import parse_json
 
 ROOT = Path(__file__).resolve().parents[2]
-CONFIG = Path(__file__).resolve().parent / "ask_config.yaml"  # the same model and budgets
+CONFIG = Path(__file__).resolve().parent / "ask_config.yaml"
 GOLD = ROOT / "evaluation" / "gold" / "research-gold.jsonl"
-FIRST_FORECAST = "2026Q3"  # at the gold's as-of, 2026-09-01
+FIRST_FORECAST = "2026Q3"
 
 
 def main() -> None:
@@ -72,7 +72,7 @@ def main() -> None:
     def answer(q: dict) -> None:
         try:
             run = agent(q["as_of"]).run(q["question"])
-        except Exception as e:  # --resume retries it
+        except Exception as e:
             print(f"{q['id']:<40} FAILED {type(e).__name__}: {e}"[:300])
             return
         row = {"id": q["id"], "category": q["category"], "question": q["question"],
@@ -92,7 +92,6 @@ def main() -> None:
 
 
 def agent_factory(config: dict):
-    """A function as_of -> a fresh Research agent (shared with investigate_run.py)."""
     retrieval = yaml.safe_load((ROOT / config["retrieval"]).read_text())["retrieval"]
     return make_factory(ROOT / config["run"]["db"], retrieval, config["generation"],
                         config["agent"])
@@ -125,7 +124,6 @@ def score(row: dict, q: dict, alternative: bool = False) -> dict:
 
 
 def _forward(claim: dict) -> bool:
-    """A claim about a period after the last reported quarter, or citing a model run."""
     period = str(claim.get("period") or "")
     if any(i.startswith("model:") for i in claim["chunk_ids"]):
         return True

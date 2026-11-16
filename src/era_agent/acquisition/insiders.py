@@ -34,7 +34,7 @@ def filings(raw: Path, ticker: str, since: str) -> list[dict]:
 def fetch(raw: Path, ticker: str, since: str, client: EdgarClient) -> int:
     folder = raw / "insiders" / ticker
     folder.mkdir(parents=True, exist_ok=True)
-    stamps_path = folder / "retrieved.json"  # accession -> when this copy was fetched
+    stamps_path = folder / "retrieved.json"
     stamps = json.loads(stamps_path.read_text()) if stamps_path.exists() else {}
     added = 0
     for f in filings(raw, ticker, since):
@@ -51,8 +51,6 @@ def fetch(raw: Path, ticker: str, since: str, client: EdgarClient) -> int:
 
 
 def parse(xml: bytes, ticker: str, accession: str, filed: str) -> list[tuple]:
-    """insider_tx rows: (ticker, accession, filed, owner, director, officer, title, date, code,
-    shares, price, acquired_disposed)."""
     root = ET.fromstring(xml)
 
     def text(node, path):
@@ -89,7 +87,7 @@ def load(raw: Path, store: Store, tickers: list[str], since: str) -> int:
                 try:
                     rows += parse(path.read_bytes(), ticker, f["accession"], f["filed"])
                 except ET.ParseError:
-                    continue  # an HTML rendering cached in error: skipped, counted below
+                    continue
         total += store.add_insider_tx(ticker, rows)
     return total
 
@@ -109,7 +107,7 @@ def main() -> None:
     raw = args.data / "raw"
     for ticker in args.tickers:
         print(f"{ticker}: {fetch(raw, ticker, args.since, client)} Form 4s fetched")
-    store = Store(args.data / "build" / "parent_child.db", AsOf.today())  # loading only
+    store = Store(args.data / "build" / "parent_child.db", AsOf.today())
     store.enable_facts()
     print(f"insider_tx: {load(raw, store, args.tickers, args.since)} rows")
 

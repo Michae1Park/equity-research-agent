@@ -1,18 +1,3 @@
-"""Consistency check before export (spec §2.3 requirement 5): code, not the LLM, checks the note.
-
-  rating_thresholds  the draft rating matches the return thresholds in research.yaml (spec §3.3)
-  section1_numbers   every number in section 1 equals the same number in its section table:
-                     the price target, return and rating as section 6 prints them, and each
-                     figure in the takeaways as a code-built table or line prints it
-  debated_drivers    every debated driver (section 3) has a row in the section 7 sensitivities
-  guidance_in_2_2    a guidance event (S2) is matched by guided lines in section 2.2
-  open_issues        every warning and error in the numbered exception log is listed, by its
-                     X-id, in section 10 (run after numbering: `open_issues`)
-
-A failed check becomes an exception row (spec §2.3 requirement 6); the pipeline gives the
-takeaways one repair turn, and never rewrites the other sections.
-"""
-
 from dataclasses import dataclass, field
 
 from era_agent.research.note import trace
@@ -40,7 +25,6 @@ def rating_for(ret: float, thresholds: dict) -> str:
 
 def check(sections: list[Section], facts: Facts, valuation: dict, thresholds: dict,
           debates: list[dict], sensitivities: list[dict], events: list[dict]) -> list[Result]:
-    """The checks before the exception log is numbered (all but open_issues)."""
     by_number = {s.number: s for s in sections}
     out = []
 

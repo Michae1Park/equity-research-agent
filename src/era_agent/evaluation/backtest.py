@@ -51,19 +51,18 @@ EASTERN = ZoneInfo("America/New_York")
 class Row:
     ticker: str
     as_of: str
-    issued: str  # the release the forecast follows
-    target: str  # the quarter forecast
-    metric: str  # revenue or the main KPI's model line
-    kpi: str  # how companies.yaml names it
+    issued: str
+    target: str
+    metric: str
+    kpi: str
     actual: float
     forecast: float | None
     seasonal_naive: float | None
     guidance_mid: float | None
-    anchored: bool  # the forecast was solved to a guide
+    anchored: bool
 
 
 def run_day(release) -> str:
-    """The day after the release's acceptance in US Eastern time (filing date if unknown)."""
     if release.accepted_at:
         accepted = datetime.fromisoformat(release.accepted_at.replace("Z", "+00:00"))
         if accepted.tzinfo is None:
@@ -80,7 +79,6 @@ def releases(store: Store, ticker: str) -> dict[str, object]:
 
 
 def metrics_for(ticker: str) -> list[tuple[str, str]]:
-    """(model line, KPI name) for revenue and the main KPI."""
     import yaml
 
     main = yaml.safe_load(companies_path().read_text())["companies"][ticker]["main_kpi"]
@@ -93,7 +91,6 @@ def metrics_for(ticker: str) -> list[tuple[str, str]]:
 
 
 def backtest(db: Path, ticker: str, settings: dict, search=None) -> list[Row]:
-    """`search`: a SubQuestionRetriever for the LLM proposer (rebound to each as-of)."""
     from concurrent.futures import ThreadPoolExecutor
     from dataclasses import replace
 
@@ -116,8 +113,6 @@ def backtest(db: Path, ticker: str, settings: dict, search=None) -> list[Row]:
 
 
 def _score_one(db, ticker, period, release, by_period, store, f) -> list[Row]:
-    """One forecast (made after `period`'s release) against the next quarter's first report;
-    the leakage probe first."""
     target, as_of = next_quarter(period), run_day(release)
     model = f.model
     if not model.forecast or model.forecast[0] != target:
@@ -144,7 +139,6 @@ def _score_one(db, ticker, period, release, by_period, store, f) -> list[Row]:
 
 
 def long_horizon(db: Path, ticker: str, settings: dict) -> list[Row]:
-    """Q1–Q4 2025 from the day after the Q4 2024 release."""
     today = Store(db, AsOf.today())
     by_period = releases(today, ticker)
     if FIRST_RELEASE not in by_period:
@@ -175,7 +169,6 @@ def long_horizon(db: Path, ticker: str, settings: dict) -> list[Row]:
 
 
 def _seasonal_naive(model, line: str, target: str) -> float | None:
-    """Same quarter last year × (1 + the last reported quarter's y/y growth)."""
     quarters = model.quarters
     i, last = quarters.index(target), quarters.index(model.history[-1])
     if i < 4 or last < 4:
@@ -186,14 +179,11 @@ def _seasonal_naive(model, line: str, target: str) -> float | None:
     return base * now / then
 
 
-# --- Scoring -------------------------------------------------------------------------------
-
-
 def score(rows: list[Row]) -> dict:
     out = {}
     for group in ("revenue", "main_kpi"):
         chosen = [r for r in rows if (r.metric == "revenue") == (group == "revenue")]
-        if group == "main_kpi":  # TRIP's main KPI is revenue
+        if group == "main_kpi":
             chosen += [r for r in rows if r.metric == "revenue" and r.kpi == "revenue"
                        and r.ticker == "TRIP"]
         out[group] = _errors(chosen)

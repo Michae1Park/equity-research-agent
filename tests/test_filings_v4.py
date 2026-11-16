@@ -1,5 +1,3 @@
-"""V4 acquisition (acquisition/filings.py): periods, releases, exhibits."""
-
 from era_agent.acquisition.filings import (
     FilingV4,
     exhibits,
@@ -13,7 +11,6 @@ CO = Company("TEST", 1, "Test Corp")
 
 
 def facts(*rows):
-    """Company facts from (accession, form, fy, fp) rows."""
     units = [{"accn": a, "form": f, "fy": fy, "fp": fp, "val": 1} for a, f, fy, fp in rows]
     return {"facts": {"us-gaap": {"Revenues": {"units": {"USD": units}}}}}
 
@@ -33,7 +30,7 @@ def test_quarter_before_is_strict():
     assert quarter_before("2026-08-05")[1:] == (2026, 2)
     assert quarter_before("2026-02-04")[1:] == (2025, 4)
     assert quarter_before("2026-07-01")[1:] == (2026, 2)
-    assert quarter_before("2026-06-30")[1:] == (2026, 1)  # filed on the quarter end itself
+    assert quarter_before("2026-06-30")[1:] == (2026, 1)
 
 
 def test_periods_by_accession_takes_the_most_common_tag():
@@ -45,7 +42,7 @@ def test_resolve_names_periods_and_checks_releases_against_reports():
     rows = [
         row("10-Q", "q2", "2026-08-05", "2026-06-30"),
         row("8-K", "er2", "2026-08-05", items="2.02,9.01"),
-        row("8-K", "er-orphan", "2026-05-06", items="2.02"),  # no Q1 10-Q in this window
+        row("8-K", "er-orphan", "2026-05-06", items="2.02"),
         row("8-K", "other", "2026-06-01", items="5.07"),
         row("10-Q/A", "amend", "2026-09-01", "2026-06-30"),
     ]
@@ -64,7 +61,7 @@ def test_resolve_flags_two_filings_for_one_period():
         row("8-K", "b", "2026-08-20", items="2.02"),
     ]
     filings, problems = resolve(CO, rows, facts())
-    assert [f.accession_no for f in filings] == ["a"]  # the first stays
+    assert [f.accession_no for f in filings] == ["a"]
     assert any("2 filings" in p for p in problems)
 
 
@@ -90,7 +87,7 @@ def test_exhibits_reads_ex99_rows_from_the_index():
 def test_resolve_keys_the_annual_proxy_to_the_prior_fiscal_year():
     rows = [
         row("DEF 14A", "px", "2026-04-20"),
-        row("DEF 14A", "special", "2026-10-01"),  # a special meeting: skipped, not a problem
+        row("DEF 14A", "special", "2026-10-01"),
         row("DEFA14A", "extra", "2026-04-25"),
         row("DEFC14A", "contest", "2025-04-24"),
     ]

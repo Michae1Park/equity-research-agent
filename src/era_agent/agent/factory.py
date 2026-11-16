@@ -1,9 +1,3 @@
-"""Ask and Research agents at any as-of, sharing one model book per as-of (design doc §5.3).
-
-Used by `era investigate` and the gold runners (experiments/v4/research_run.py,
-investigate_run.py).
-"""
-
 import threading
 from dataclasses import replace
 from pathlib import Path
@@ -18,21 +12,15 @@ from era_agent.store import Store
 
 
 def agent_factory(db: Path, retrieval: dict, generation: dict, agent_config: dict):
-    """A function (as_of, tool_set, session) -> a fresh agent. Search runs where
-    retrieval.device puts it (null: the CPU while vLLM holds the GPU)."""
     base = SubQuestionRetriever.from_settings(Store(db), retrieval)
     model = get_model(generation["model"], base_url=generation["base_url"], thinking=False)
     lock, search_lock = threading.Lock(), threading.Lock()
     books: dict[str, Book] = {}
 
     def agent(as_of: str, tool_set: str = "research", session: Book | None = None) -> Agent:
-        """A fresh agent per question (its own scratch runs), sharing the as-of's book of base
-        models and valuations. session: an existing session's book, so several agents (an
-        Investigate run's sub-runs) share their scratch runs."""
         store = Store(db, AsOf.of(as_of))
         with lock:
             book = books.setdefault(as_of, Book(store))
-        # shared base forecasts; own scratch runs and valuations (scratch-n is per session)
         session = session or Book(store, book.settings, book.forecasts, {}, {}, book.earlier)
         search = replace(base, decomposer=replace(base.decomposer, store=store),
                          hybrid=replace(base.hybrid, store=store))
@@ -43,7 +31,7 @@ def agent_factory(db: Path, retrieval: dict, generation: dict, agent_config: dic
             if name == "search_filings":
                 with search_lock:
                     return call(name, arguments)
-            with lock:  # model tools share the book's caches
+            with lock:
                 return call(name, arguments)
 
         toolbox.call = locked

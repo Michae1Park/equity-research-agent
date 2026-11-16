@@ -1,11 +1,3 @@
-"""V4.1: extract every release in the gold set and score it against the labels.
-
-  uv run python experiments/v4/extract_pilot.py [--model anthropic:<id>]
-
---releases all extracts every release in the store (V4.2: what `era build --stage kpis` loads);
---reuse <label> takes releases already extracted by that run instead of calling the model again.
-"""
-
 import argparse
 import json
 import time
@@ -21,7 +13,7 @@ from era_agent.store import Store
 DB = Path("data/v4/build/parent_child.db")
 GOLD = Path("evaluation/gold/extraction-gold.jsonl")
 OUT = Path("output/extraction")
-FILED = {}  # (ticker, period) → filing date, from the store
+FILED = {}
 
 
 def main() -> None:
@@ -51,7 +43,7 @@ def main() -> None:
 
     def run(release):
         ticker, period = release
-        store = Store(DB, AsOf.after(filings[release]))  # sees the release, nothing later
+        store = Store(DB, AsOf.after(filings[release]))
         t = time.time()
         if args.method == "rules":
             from era_agent.facts.rules import extract_rules

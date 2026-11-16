@@ -1,18 +1,3 @@
-"""KPI and guidance extraction from earnings releases (V4 design doc §5), layer 1.
-
-One LLM call per release: the release's chunks (tables first, within a character budget) and
-the company's registry (kpis.yaml) in; KPI and guidance rows, each with a verbatim quote, out.
-Code then decides what is stored:
-
-  1. the chunk id is one the model was given, and the quote occurs in that chunk verbatim
-     (whitespace normalized);
-  2. the value (guidance: low and high) is found in the quote, unit-aware (verify.find_value);
-  3. the metric and segment are in the registry.
-
-Rows that fail get one repair turn listing what failed; rows that still fail become exceptions
-(data gaps), never stored values. The model may be a local vLLM model or Claude (models.py).
-"""
-
 import json
 import re
 from dataclasses import asdict, dataclass, field
@@ -27,7 +12,7 @@ from era_agent.store import ChunkRecord, Store
 
 REGISTRY = Path(__file__).with_name("kpis.yaml")
 PROMPT = PROMPTS / "extract.md"
-MAX_CHARS = 40_000  # ~10k tokens of release text: the 12k input budget (§5.3) less the registry
+MAX_RELEASE_CHARS = 40_000
 
 
 def registry() -> dict:
@@ -37,10 +22,10 @@ def registry() -> dict:
 @dataclass
 class Extraction:
     ticker: str
-    period: str  # the reported quarter, 2026Q2
+    period: str
     kpis: list[dict] = field(default_factory=list)
     guidance: list[dict] = field(default_factory=list)
-    exceptions: list[dict] = field(default_factory=list)  # rows that failed validation
+    exceptions: list[dict] = field(default_factory=list)
     calls: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
@@ -49,8 +34,6 @@ class Extraction:
 def release_chunks(
     store: Store, ticker: str, period: str, entry: dict | None = None
 ) -> list[ChunkRecord]:
-    """The release's chunks cut to the character budget: tables first, then (for releases that
-    are slides turned into text, all prose) the chunks naming the most registry labels."""
     prefix = f"{ticker}-{period}-ER-"
     chunks = [c for c in store.chunks(ticker) if c.id.startswith(prefix)]
     labels = [
@@ -66,7 +49,7 @@ def release_chunks(
     ordered = sorted(chunks, key=lambda c: (c.kind != "table", -hits(c), c.id))
     kept, size = [], 0
     for c in ordered:
-        if size + len(c.text) > MAX_CHARS:
+        if size + len(c.text) > MAX_RELEASE_CHARS:
             continue
         kept.append(c)
         size += len(c.text)
@@ -74,12 +57,10 @@ def release_chunks(
 
 
 def _squash(text: str) -> str:
-    """Whitespace collapsed; zero-width spaces (in image-based releases' text) dropped."""
     return re.sub(r"\s+", " ", text.replace("\u200b", "")).strip()
 
 
 def validate(row: dict, kind: str, chunks: dict[str, ChunkRecord], entry: dict) -> str | None:
-    """Why a model row can't be stored, or None."""
     chunk = chunks.get(row.get("chunk_id", ""))
     if chunk is None:
         return f"unknown chunk_id {row.get('chunk_id')!r}"
@@ -97,7 +78,7 @@ def validate(row: dict, kind: str, chunks: dict[str, ChunkRecord], entry: dict) 
     )
     names = ("value",) if kind == "kpi" else ("low", "high")
     if kind == "guidance" and row.get("high") is None:
-        names = ("low",)  # open-ended: "at least 35.5%"
+        names = ("low",)
     for name in names:
         if row.get(name) is None or not find_value(row[name], spec["unit"], probe):
             return f"{name} {row.get(name)!r} ({spec['unit']}) is not in the quote"
@@ -107,7 +88,6 @@ def validate(row: dict, kind: str, chunks: dict[str, ChunkRecord], entry: dict) 
 
 
 def _context(row: dict, chunk: ChunkRecord) -> str:
-    """The chunk's text around the row's number, for the repair turn to copy from."""
     probe = ChunkRecord(
         chunk.id, chunk.ticker, chunk.fiscal_year, chunk.item, chunk.kind, chunk.text, None, []
     )
@@ -120,8 +100,6 @@ def _context(row: dict, chunk: ChunkRecord) -> str:
 
 
 def definition_version(spec: dict, period: str) -> int:
-    """The KPI's definition version for a period: the latest `definitions` entry at or before
-    it (periods compare as text, 2025Q4 < 2026Q2), else 1."""
     versions = [v for start, v in (spec.get("definitions") or {}).items() if str(start) <= period]
     return max(versions, default=1)
 
@@ -134,17 +112,12 @@ def _number(value) -> float | None:
 
 
 def growth_pair(quote: str) -> tuple[float, float] | None:
-    """(earlier, later) when a table row shows two values and the growth between them, else
-    None: the later one is the reported quarter. Either column order occurs: UBER prints prior
-    then current ("| Trips | 3,268 | 3,867 | 18% |"), TRIP and EXPE current then prior
-    ("| Viator | $294 | $270 | 9% |"), so the sign of the growth decides. Losses (parenthesized
-    values) have no reliable sign convention; for them the order is taken as prior, current."""
     cells = [c.strip() for c in quote.strip("| ").split("|")]
     values = [v for c in cells if (v := _cell_number(c)) is not None]
     growth = [_growth(m.group(1)) for c in cells if (m := re.fullmatch(r"(\(?-?[\d.]+\)?)\s?%", c))]
     for i in range(len(values) - 1):
         (a, loss_a), (b, loss_b) = values[i], values[i + 1]
-        if not a or not b or a == b:  # equal columns: either one is the reported value
+        if not a or not b or a == b:
             continue
         if loss_a or loss_b:
             if any(abs(abs(b / a - 1) * 100 - abs(g)) <= 1.0 for g in growth):
@@ -163,7 +136,6 @@ def _growth(cell: str) -> float:
 
 
 def _cell_number(cell: str) -> tuple[float, bool] | None:
-    """(magnitude, is a loss) of a numeric cell."""
     if "%" in cell or not re.fullmatch(r"\(?\$?\s?[\d,]+(\.\d+)?\)?", cell):
         return None
     return float(re.sub(r"[^\d.]", "", cell)), cell.startswith("(")
@@ -182,7 +154,6 @@ def _user(ticker: str, period: str, entry: dict, chunks: list[ChunkRecord]) -> s
 def extract(
     model: Model, store: Store, ticker: str, period: str, max_tokens: int = 6000
 ) -> Extraction:
-    """Extract one release's KPIs and guidance (store: bound to an as-of after the release)."""
     entry = registry()[ticker]
     chunks = release_chunks(store, ticker, period, entry)
     by_id = {c.id: c for c in chunks}
@@ -190,7 +161,7 @@ def extract(
     messages = [{"role": "user", "content": _user(ticker, period, entry, chunks)}]
     system = PROMPT.read_text()
     pending: list[tuple[str, dict, str]] = []
-    for attempt in range(2):  # the call, then one repair turn
+    for attempt in range(2):
         response = model.complete(messages, system=system, max_tokens=max_tokens)
         out.calls += 1
         out.input_tokens += response.input_tokens
@@ -254,7 +225,6 @@ def _clean(row: dict, kind: str) -> dict:
 
 
 def _dedupe(rows: list[dict], key: tuple[str, ...]) -> list[dict]:
-    """The first row per key (a repair may repeat a row that already passed)."""
     seen: dict[tuple, dict] = {}
     for row in rows:
         seen.setdefault(tuple(row.get(k) for k in key), row)

@@ -1,24 +1,3 @@
-"""Quarters from XBRL facts (V4 design doc §3.2): one value per metric and quarter, as of a date.
-
-10-Q cash flows are reported year to date, so quarters are built by duration length:
-
-  Q1  the three-month fact                                          direct
-  Q2  the three-month fact, else H1 − Q1                            direct | ytd_diff
-  Q3  the three-month fact, else 9M − H1                            direct | ytd_diff
-  Q4  FY − 9M (the 10-K has no fourth-quarter column)               fy_minus_9m
-
-Instants (balance sheet) are the balance at the quarter end. Per-share and share-count metrics
-don't add up, so only their direct facts are kept. Each value uses, per period, the newest fact
-visible at the store's AsOf (a restatement once it is filed, the original before), and records
-its inputs' fact ids. December fiscal years only (companies.yaml, all eight).
-
-Checks (layer 2, §7.3): `ytd_consistency` (a direct three-month Q2/Q3 equals its year-to-date
-difference) and `q4_ties` (Q1 + Q2 + Q3 + Q4 = FY). A recast (TRIP's Q2 2026 10-Q re-reports
-2025 on a new basis) leaves a year's periods on two bases until every one is re-reported; a
-check that fails in a year with a restated period reads `restated` (an exception for the log,
-spec §1.5), not `fail`, and each quarter says whether an input was restated.
-"""
-
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -28,7 +7,7 @@ import yaml
 from era_agent.store import Store
 
 METRICS_FILE = Path(__file__).with_name("metrics.yaml")
-TOLERANCE = 1e6  # USD: XBRL values are whole dollars of figures reported in millions
+MAX_GAP_USD = 1e6
 SPANS = {"Q": (85, 95), "H1": (178, 184), "9M": (270, 276), "FY": (360, 368)}
 
 
@@ -41,13 +20,13 @@ class Quarter:
     ticker: str
     metric: str
     fiscal_year: int
-    period: str  # Q1–Q4, FY
+    period: str
     value: float
     unit: str
     derivation: str
     inputs: list[str] = field(default_factory=list)
     filed: str = ""
-    restated: bool = False  # an input period was re-reported with a different value
+    restated: bool = False
 
     @property
     def id(self) -> str:
@@ -61,34 +40,27 @@ def _span(start: str, end: str) -> str | None:
 
 
 def restated_periods(store: Store, ticker: str, concepts: list[str]) -> set[tuple]:
-    """(start, end) periods that visible filings report with different values."""
     values: dict[tuple, set] = {}
     for row in store.facts(ticker, concepts):
         if row["source"] == "companyfacts":
             values.setdefault((row["concept"], row["start"], row["end"]), set()).add(row["value"])
-    return {(start, end) for (_, start, end), v in values.items() if max(v) - min(v) > TOLERANCE}
+    return {(start, end) for (_, start, end), v in values.items() if max(v) - min(v) > MAX_GAP_USD}
 
 
 def recast_years(store: Store, ticker: str, concepts: list[str]) -> set[int]:
-    """Fiscal years on two bases: those of restated periods, and the restating filing's own
-    year (its earlier quarters were filed on the old basis and are not re-reported yet)."""
     copies: dict[tuple, list[dict]] = {}
     for row in store.facts(ticker, concepts):
         if row["source"] == "companyfacts":
             copies.setdefault((row["concept"], row["start"], row["end"]), []).append(row)
     years = set()
     for (_, _, end), rows in copies.items():
-        if max(r["value"] for r in rows) - min(r["value"] for r in rows) > TOLERANCE:
+        if max(r["value"] for r in rows) - min(r["value"] for r in rows) > MAX_GAP_USD:
             years.add(int(end[:4]))
             years.add(max(rows, key=lambda r: r["filed"])["fy"] or int(end[:4]))
     return years
 
 
 def _visible(store: Store, ticker: str, concepts: list[str]) -> dict[tuple, dict]:
-    """(start, end) → the fact to use, the newest visible copy. Within a fiscal year (the year
-    a period ends in) every period comes from one concept, the first in priority order with
-    facts that year: mixing concepts (SBC in the income statement vs the cash-flow statement)
-    breaks the year-to-date arithmetic."""
     by_concept = {}
     for concept in concepts:
         rows = [r for r in store.facts(ticker, [concept]) if r["source"] == "companyfacts"]
@@ -106,7 +78,6 @@ def _visible(store: Store, ticker: str, concepts: list[str]) -> dict[tuple, dict
 
 
 def derive(store: Store, ticker: str, metric: str, spec: dict) -> list[Quarter]:
-    """The metric's quarters (and full years) visible at the store's AsOf."""
     concepts = spec.get("companies", {}).get(ticker, spec["concepts"])
     facts = _visible(store, ticker, concepts)
     restated = restated_periods(store, ticker, concepts)
@@ -146,7 +117,7 @@ def derive(store: Store, ticker: str, metric: str, spec: dict) -> list[Quarter]:
         if span == "Q":
             name = f"Q{d.month // 3}"
         elif date.fromisoformat(start) != date(d.year, 1, 1):
-            continue  # a year-to-date span starts on January 1
+            continue
         else:
             name = span
         by_year.setdefault(d.year, {})[name] = r
@@ -185,8 +156,6 @@ def derive(store: Store, ticker: str, metric: str, spec: dict) -> list[Quarter]:
 def checks(
     store: Store, ticker: str, metric: str, spec: dict, quarters: list[Quarter]
 ) -> list[dict]:
-    """ytd_consistency and q4_ties for one flow metric; one row per check, status pass, fail or
-    restated."""
     if spec["kind"] != "flow":
         return []
     concepts = spec.get("companies", {}).get(ticker, spec["concepts"])
@@ -231,5 +200,5 @@ def _check(name: str, ticker: str, metric: str, period: str, gap: float, recast:
         "metric": metric,
         "period": period,
         "gap": gap,
-        "status": "pass" if gap <= TOLERANCE else ("restated" if recast else "fail"),
+        "status": "pass" if gap <= MAX_GAP_USD else ("restated" if recast else "fail"),
     }

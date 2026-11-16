@@ -1,20 +1,3 @@
-"""V4 acquisition (design doc §3.2): every 10-K, 10-Q, earnings release and proxy in the window.
-
-  10-K, 10-Q   one original per period (amendments ignored); fiscal year and period from the
-               company-facts rows tagged with the filing's accession
-  release      8-K with Item 2.02; every EX-99.* exhibit from the filing index (99.1 release,
-               99.2 letter where used); the quarter it reports is the last quarter end before
-               it was filed, checked against that quarter's 10-Q or 10-K
-  DEF 14A      the annual proxy (form "DEF14A"): the first filed each year, keyed to the fiscal
-               year it reports on (filed in 2026 → FY2025); a later one that year (a special
-               meeting) is skipped. Text only: compensation, equity plans, share requests
-
-Each filing lands in <data_dir>/raw/filings/<TICKER>/<period>-<form>/ (FY2025-10K,
-2026Q2-10Q, 2026Q2-ER, FY2025-DEF14A) with a metadata.json, and raw/manifest.json lists them
-all with the time each was retrieved. December fiscal years only (all V4 companies;
-`era companies verify` checks).
-"""
-
 import json
 import logging
 from collections import Counter
@@ -37,8 +20,8 @@ INDEX_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{accession}/{accessio
 
 @dataclass(frozen=True)
 class Document:
-    name: str  # file name in the filing
-    type: str  # 10-K, 10-Q, EX-99.1, …
+    name: str
+    type: str
     url: str
 
 
@@ -46,19 +29,18 @@ class Document:
 class FilingV4:
     ticker: str
     cik: int
-    form: str  # 10-K, 10-Q, ER (an 8-K Item 2.02 earnings release), DEF14A (proxy)
+    form: str
     accession_no: str
     filing_date: str
-    accepted_at: str  # EDGAR acceptance time, UTC
+    accepted_at: str
     period_end_date: str
     fiscal_year: int
-    fiscal_period: str  # FY, Q1–Q4 (Q4: a release for the fourth quarter)
+    fiscal_period: str
     documents: list[Document] = field(default_factory=list)
     retrieved_at: str | None = None
 
     @property
     def period(self) -> str:
-        """The period key in folder names and chunk ids: FY2025, 2026Q2."""
         if self.fiscal_period == "FY":
             return f"FY{self.fiscal_year}"
         return f"{self.fiscal_year}{self.fiscal_period}"
@@ -69,7 +51,6 @@ class FilingV4:
 
 
 def periods_by_accession(company_facts: dict) -> dict[str, tuple[int, str]]:
-    """(fiscal year, fiscal period) of each 10-K and 10-Q, the most common tag on its facts."""
     seen: dict[str, Counter] = {}
     for taxonomy in company_facts.get("facts", {}).values():
         for concept in taxonomy.values():
@@ -81,7 +62,6 @@ def periods_by_accession(company_facts: dict) -> dict[str, tuple[int, str]]:
 
 
 def quarter_before(day: str) -> tuple[date, int, int]:
-    """The last calendar quarter end strictly before `day`: (end, year, quarter)."""
     d = date.fromisoformat(day)
     ends = [date(d.year - 1, 12, 31)] + [date(d.year, m, e) for m, e in ((3, 31), (6, 30), (9, 30))]
     end = max(e for e in ends if e < d)
@@ -91,7 +71,6 @@ def quarter_before(day: str) -> tuple[date, int, int]:
 def resolve(
     company: Company, rows: list[dict], company_facts: dict
 ) -> tuple[list[FilingV4], list[str]]:
-    """The window's filings, one per (form, period), and the problems found."""
     periods = periods_by_accession(company_facts)
     filings, problems = [], []
     for row in rows:
@@ -128,7 +107,7 @@ def resolve(
                     **common,
                 )
             )
-        elif form in ("DEF 14A", "DEFC14A"):  # DEFC14A: a contested proxy (LYFT 2025)
+        elif form in ("DEF 14A", "DEFC14A"):
             year = int(row["filingDate"][:4]) - 1
             filings.append(
                 FilingV4(
@@ -145,12 +124,11 @@ def resolve(
         by_key.setdefault((f.form, f.period), []).append(f)
     unique = []
     for (form, period), group in sorted(by_key.items()):
-        if len(group) > 1 and form != "DEF14A":  # a second proxy: a special meeting
+        if len(group) > 1 and form != "DEF14A":
             accessions = [f.accession_no for f in group]
             problems.append(f"{company.ticker} {form} {period}: {len(group)} filings {accessions}")
         unique.append(min(group, key=lambda f: f.filing_date))
 
-    # A release reports the quarter whose 10-Q (Q1–Q3) or 10-K (Q4) has the same period end.
     reports = {f.period_end_date for f in unique if f.form != "ER"}
     for f in unique:
         if f.form == "ER" and f.period_end_date not in reports:
@@ -162,7 +140,6 @@ def resolve(
 
 
 def exhibits(index_html: str, base: str) -> list[Document]:
-    """The EX-99.* documents in a filing index, in index order."""
     found = []
     for tr in BeautifulSoup(index_html, "lxml").select("table.tableFile tr"):
         cells = tr.find_all("td")
@@ -182,7 +159,6 @@ def fetch_company(
     forms: tuple[str, ...] = FORMS,
     refresh: bool = False,
 ) -> tuple[list[FilingV4], list[str]]:
-    """Download a company's filings in the window; returns them and any problems."""
     cache = data_dir / "raw" / "edgar" / company.ticker
     cik = f"CIK{company.cik:010d}"
     submissions = client.cached_json(
@@ -243,7 +219,6 @@ def fetch(
     forms: tuple[str, ...] = FORMS,
     refresh: bool = False,
 ) -> list[str]:
-    """Download every company's filings and record them in raw/manifest.json; the problems."""
     client = EdgarClient(user_agent)
     manifest_path = data_dir / "raw" / "manifest.json"
     manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}

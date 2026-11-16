@@ -1,18 +1,3 @@
-"""S11 export (V4 design doc §11): the report's workbook and the note's PDF.
-
-The workbook is the Model tab and Assumptions tab (research/export/workbook.py, checked for
-parity with LibreOffice) plus Summary, Scenarios, Valuation, DCF, Revisions, Model (prior),
-Checks and Log (the evidence and exception rows), the tabs of spec §2.3. The PDF is the note's
-Markdown printed with headless Chrome.
-
-DCF (spec §2.3): the base case's unlevered free cash flows (blue values from the model) with
-live formulas for each discount factor, present value, the terminal value, EV, the terminal
-value's share of EV and the value per share, so a changed WACC or growth recalculates; then the
-price-per-share grid over WACC × terminal growth (values: each grid point refades the annual
-years toward its growth, research/valuation.py). Model (prior): the parent version's lines and
-values as it saved them, or "initial draft (no prior run)".
-"""
-
 import html
 import re
 from pathlib import Path
@@ -165,7 +150,6 @@ th { background: #eef0f5; } p { margin: 1mm 0; }"""
 
 
 def to_html(markdown: str, title: str) -> str:
-    """The note's small Markdown subset: headings, tables, bullet lines and paragraphs."""
     out, table = [], []
 
     def flush():

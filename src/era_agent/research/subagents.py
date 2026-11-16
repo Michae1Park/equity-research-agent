@@ -1,10 +1,3 @@
-"""Report mode's research sub-agents (design doc §8): S2 events and S9 debates.
-
-Each is a bounded Agent (the Ask tools, its own prompt and research.yaml budget) that returns
-JSON; an item is kept only if at least one evidence id resolves at the as-of. A debate's
-evidence values (resolved numbers) become note facts, so its numbers can be traced.
-"""
-
 import re
 
 from era_agent.agent.loop import Agent

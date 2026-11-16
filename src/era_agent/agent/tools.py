@@ -1,34 +1,3 @@
-"""The V3 agent's tools: what each does, its schema, and the code that runs it.
-
-  search_filings   V1's retrieval: sub-questions per company and filing, hybrid search, round-robin
-  calculator       generation/calculator.py: named operations or an expression over inputs
-  xbrl_facts       SEC XBRL company facts for one concept and 10-K            (tool set "full")
-  edgar_filings    live EDGAR filing metadata: which filings exist, when      (tool set "full")
-
-V4 tool set "ask" (design doc §7), every result as of the store's AsOf:
-  financials       derived quarters and full years of a core line (facts/quarters.py)
-  company_kpis     release KPIs (facts/extract.py), with their source chunks
-  guidance         release guidance, with the actual where the target period has reported
-  filings          the corpus's 10-Ks, 10-Qs and releases, with filing dates
-  market_data      closing prices and macro series
-  crosscheck       outside series: NYC TLC trips (Uber, Lyft), BTS US airline passengers
-  research_report  our saved Report versions (made before the as-of): estimates, price target,
-                   rating and review status, each with a model:<T>:<as_of>:v<n>:… id
-
-V4 tool set "research" (§5.2) adds the model group, over the session's model book
-(research/book.py), every number cited by a model: id:
-  model_view       history and forecast lines, the assumption register and guidance anchors
-  run_scenario     overrides to the drivers → changed lines, price target and rating vs base
-  compare_peers    one metric (a model line or a valuation output) across companies
-  variance_review  our prior estimate for a quarter vs the actual, by driver, with the bridge
-
-Tools never raise: a bad call returns {"error": ...} for the model to read and recover from.
-The tool set ("text" or "full") is the V3 ablation (experiments/V3_AGENT.md).
-
-V4 (design doc §7): tools come in groups, and a tool set is a list of groups, so no single
-context gets every tool. A Toolbox sees what its store's AsOf sees; no tool takes an as-of.
-"""
-
 import json
 from dataclasses import dataclass
 
@@ -48,7 +17,7 @@ PERIODS = {
     "items": {"type": "string"},
     "description": "Period keys, e.g. 2026Q2 or FY2025 (default: the latest eight)",
 }
-ROWS = 40  # rows a data tool returns at most; the rest are counted
+ROWS = 40
 
 SPECS = {
     "search_filings": ToolSpec(
@@ -202,7 +171,7 @@ SPECS |= {
     ),
 }
 
-ASK_SPECS = {  # tool set "ask": the same tool over every form
+ASK_SPECS = {
     "search_filings": ToolSpec(
         "search_filings",
         "Search the text of the filings: 10-Ks, 10-Qs and earnings releases (ER). Name the "
@@ -354,10 +323,10 @@ COVERAGE = {
            "three months after the month (publish dates estimated).",
 }
 
-GROUPS = {  # V4 §5.2; reports and model gain their tools in V4.5
+GROUPS = {
     "text": ("search_filings",),
     "calc": ("calculator",),
-    "sec": ("xbrl_facts", "edgar_filings"),  # V3's facts group
+    "sec": ("xbrl_facts", "edgar_filings"),
     "facts": ("financials", "company_kpis", "guidance", "filings"),
     "market": ("market_data", "crosscheck"),
     "reports": ("research_report",),
@@ -375,10 +344,10 @@ TOOL_SETS = {name: sum((GROUPS[g] for g in groups), ()) for name, groups in GROU
 @dataclass
 class Toolbox:
     store: Store
-    search: SubQuestionRetriever | None  # None: search_filings unavailable (tests)
+    search: SubQuestionRetriever | None
     sec: SecData | None
     tool_set: str = "full"
-    book: object | None = None  # research/book.py Book: tool set "research" (model tools)
+    book: object | None = None
 
     @property
     def asof(self) -> AsOf:
@@ -404,7 +373,6 @@ class Toolbox:
         except (CalculatorError, SecError, ValueError) as e:
             return {"error": str(e)}
 
-    # --- Corpus --------------------------------------------------------------------------
 
     def search_filings(
         self,
@@ -415,9 +383,6 @@ class Toolbox:
         periods: list[str] | None = None,
         forms: list[str] | None = None,
     ) -> dict:
-        """V1's retrieval, with the companies and years the model gives in place of those it
-        would find in the query. No company given or named: an error, not an unfiltered search.
-        V4 (tool set "ask"): periods and forms in place of fiscal years."""
         if self.search is None:
             return {"error": "search is not available"}
         k = max(1, min(int(k), 16))
@@ -437,7 +402,7 @@ class Toolbox:
             }
         if self.tool_set in ("ask", "research"):
             for p in periods or []:
-                period_parts(p)  # a bad key: ValueError, returned as an error
+                period_parts(p)
             result = self.search.search(query, k, tickers, None, periods or None, forms or None)
             return {
                 "query": query,
@@ -472,17 +437,15 @@ class Toolbox:
     def _corpus(self) -> list[str]:
         return [f"{f.ticker} FY{f.fiscal_year}" for f in self.store.filings()]
 
-    # --- Calculator ----------------------------------------------------------------------
 
     def calculator(
         self, inputs: dict, op: str | None = None, expression: str | None = None
     ) -> dict:
-        if op == "expression":  # models write the mode's name as the op
+        if op == "expression":
             op = None
         result = calculate(op, expression, inputs)
         return {"result": result.result, "formula": result.formula, "inputs": result.inputs}
 
-    # --- SEC -----------------------------------------------------------------------------
 
     def xbrl_facts(self, company: str, concept: str, fiscal_year: int) -> dict:
         if self.sec is None:
@@ -494,8 +457,6 @@ class Toolbox:
             return {"error": "SEC data is not available"}
         return self.sec.filings(company, form, int(fiscal_year) if fiscal_year else None)
 
-
-    # --- V4 data (tool set "ask") ------------------------------------------------------
 
     def _ticker(self, company: str) -> str:
         tickers, unknown = self._tickers([company])
@@ -533,7 +494,7 @@ class Toolbox:
         if not rows:
             reported = sorted({r["metric"] for r in self.store.kpis(ticker)})
             return {"error": f"no KPI {metric!r} for {ticker}", "kpis": reported}
-        latest = {(r["metric"], r["segment"], r["period"]): r for r in rows}  # later filed wins
+        latest = {(r["metric"], r["segment"], r["period"]): r for r in rows}
         out = [
             {"id": kpi_id(ticker, r["metric"], r["segment"], r["period"]), "period": r["period"],
              "metric": r["metric"], "segment": r["segment"], "value": r["value"],
@@ -554,7 +515,7 @@ class Toolbox:
             given = sorted({r["metric"] for r in self.store.guidance(ticker)})
             return {"error": f"no guidance {metric!r} for {ticker}", "guided": given}
         resolver, out = Resolver(self.store), []
-        for r in rows:  # oldest issue first: an update follows the guide it replaces
+        for r in rows:
             actual = r["basis"] == "level" and resolver.resolve(
                 kpi_id(ticker, r["metric"], r["segment"], r["target_period"])
             )
@@ -629,13 +590,12 @@ class Toolbox:
                 points = [p for p in points if (not start or p[0][:7] >= start)
                           and (not end or p[0][:7] <= end)]
             else:
-                points = points[-12:]  # the latest year
+                points = points[-12:]
             rows += [{"id": f"{name}:{d}", "series": label, "month": d[:7], "value": v}
                      for d, v in points]
         return {"series": series, "coverage": COVERAGE[series], "unit": "trips" if series ==
                 "tlc" else "passengers"} | _cap(rows)
 
-    # --- V4 saved reports (tool sets "ask" and "research") --------------------------------
 
     def research_report(self, company: str, lines: list[str] | None = None,
                         periods: list[str] | None = None, as_of: str | None = None) -> dict:
@@ -685,7 +645,6 @@ class Toolbox:
                                     "valid": [x["name"] for x in model["lines"]][:60]}
         return out
 
-    # --- V4 model (tool set "research") ------------------------------------------------
 
     def model_view(self, company: str, lines: list[str] | None = None,
                    periods: list[str] | None = None) -> dict:
@@ -817,8 +776,6 @@ class Toolbox:
 
 
 def variance(book, ticker: str, period: str) -> dict:
-    """Our estimate for `period` (made the day after the previous quarter's release) against
-    the actual, the revenue bridge with ids, and the estimate's assumptions."""
     from era_agent.evaluation.backtest import releases, run_day
     from era_agent.research.forecast import next_quarter
 
@@ -853,7 +810,6 @@ def variance(book, ticker: str, period: str) -> dict:
 
 
 def _main_lines(model) -> list[str]:
-    """The lines a view shows by default: the operating build's drivers, then the summary."""
     names = [x.name for x in model.lines]
     build = [n for n in ("volume", "trips", "gross_bookings", "value_per_unit",
                          "gross_bookings_per_unit", "take_rate", "adj_ebitda_margin_gb")
@@ -863,8 +819,6 @@ def _main_lines(model) -> list[str]:
 
 
 def _bridge(prior, actual, period: str) -> dict | None:
-    """Revenue variance = gross value effect + take-rate effect (gross value split into volume
-    and value per unit where the template has them)."""
     def v(model, line):
         return model.value(line, period) if any(x.name == line for x in model.lines) else None
 
@@ -889,7 +843,6 @@ def _unit(unit: str) -> str:
 
 
 def _shown(value, unit: str):
-    """A value as the tools show it: ratios in percent (as model: ids resolve)."""
     if value is None:
         return None
     return _round(value * 100 if unit == "fraction" else value)
@@ -904,7 +857,6 @@ def _key(q) -> str:
 
 
 def _pick(rows: list[dict], periods: list[str] | None) -> dict:
-    """The rows of the periods asked for, or of the latest eight periods."""
     if periods:
         wanted = {p.upper().replace(" ", "") for p in periods}
         rows = [r for r in rows if r["period"].upper() in wanted]
@@ -915,7 +867,6 @@ def _pick(rows: list[dict], periods: list[str] | None) -> dict:
 
 
 def _order(period: str) -> tuple:
-    """FY2025 sorts after 2025Q4."""
     return (period[2:], "Q5") if period.startswith("FY") else (period[:4], period[4:])
 
 
@@ -925,7 +876,6 @@ def _cap(rows: list[dict]) -> dict:
 
 
 def _coerce(arguments: dict, properties: dict) -> dict:
-    """Object and array arguments the model wrote as JSON strings, parsed."""
     out = dict(arguments)
     for key, value in arguments.items():
         if properties.get(key, {}).get("type") in ("object", "array") and isinstance(value, str):
@@ -937,7 +887,6 @@ def _coerce(arguments: dict, properties: dict) -> dict:
 
 
 def chunk_view(chunk: ChunkRecord) -> dict:
-    """A chunk as the model sees it in a tool result."""
     return {
         "chunk_id": chunk.id,
         "company": chunk.ticker,
@@ -951,8 +900,6 @@ def chunk_view(chunk: ChunkRecord) -> dict:
 
 
 def ask_chunk_view(chunk: ChunkRecord) -> dict:
-    """A chunk as the Ask model sees it: its form, period and filing date in place of the
-    10-K's fiscal year."""
     fy, fp = chunk.fiscal_year, chunk.fiscal_period
     return {
         "chunk_id": chunk.id,
@@ -974,9 +921,6 @@ def toolbox_from_settings(
     search: bool = True,
     asof: AsOf | None = None,
 ) -> Toolbox:
-    """The tools as the config's `agent:` section sets them. live: SEC requests not in the
-    cache go to EDGAR (needs your SEC User-Agent: `era setup`); otherwise offline. search:
-    load V1's models. asof: what the tools see (None: today, as in V3)."""
     from pathlib import Path
 
     from era_agent.acquisition.edgar import EdgarClient

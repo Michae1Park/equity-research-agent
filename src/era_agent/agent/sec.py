@@ -1,15 +1,3 @@
-"""SEC data the V3 agent can call: XBRL company facts and live EDGAR filing metadata.
-
-Every response is cached under data/raw/edgar/<TICKER>/ (the files `era fetch` already
-writes for the corpus). Offline (no client), only cached responses are served, so an eval
-run never touches the network and always sees the same data.
-
-XBRL facts are a citable source of their own: `xbrl:<TICKER>:<taxonomy>:<concept>:
-<accession>:<period end>`; V4 ids write a duration as `<start>/<end>`
-(research/refs.py). EDGAR metadata answers which filings exist and when; it never
-answers financial questions.
-"""
-
 import json
 import re
 from dataclasses import dataclass
@@ -28,13 +16,11 @@ class SecError(RuntimeError):
 
 @dataclass
 class SecData:
-    cache: Path  # data/raw/edgar
-    client: EdgarClient | None = None  # None: offline, cache only
+    cache: Path
+    client: EdgarClient | None = None
 
-    # --- Companies -----------------------------------------------------------------------
 
     def resolve(self, name: str) -> tuple[str, int, str]:
-        """(ticker, CIK, name) for a corpus company, or any SEC registrant by ticker or name."""
         company = resolve_company(name)
         if company:
             return company.ticker, company.cik, company.name
@@ -69,11 +55,8 @@ class SecData:
             f"{DATA_URL}/submissions/CIK{cik:010d}.json", self.cache / ticker / "submissions.json"
         )
 
-    # --- XBRL ----------------------------------------------------------------------------
 
     def xbrl_facts(self, company: str, concept: str, fiscal_year: int) -> dict:
-        """The values a 10-K tagged for one concept: the filing's current year and the prior
-        years it restates beside it. An unknown concept returns the closest concept names."""
         ticker, cik, name = self.resolve(company)
         facts = self.company_facts(ticker, cik).get("facts", {})
         found = _find_concept(facts, concept)
@@ -118,12 +101,11 @@ class SecData:
         }
 
     def xbrl_fact(self, xbrl_id: str) -> dict | None:
-        """The fact an xbrl_id cites, from the cache (claim check; never fetches)."""
         parts = xbrl_id.split(":")
         if len(parts) != 6 or parts[0] != "xbrl":
             return None
         _, ticker, taxonomy, tag, accession, period = parts
-        start, _, end = period.rpartition("/")  # V4 ids name a duration's start; V3 ids don't
+        start, _, end = period.rpartition("/")
         path = self.cache / ticker / "companyfacts.json"
         if not path.exists():
             return None
@@ -136,10 +118,8 @@ class SecData:
                     return {"value": row["val"], "unit": unit, "ticker": ticker}
         return None
 
-    # --- EDGAR metadata ------------------------------------------------------------------
 
     def filing(self, accession: str) -> dict | None:
-        """The filing an accession number names, from the cached submissions (claim check)."""
         for path in sorted(self.cache.glob("*/submissions.json")):
             recent = json.loads(path.read_text())["filings"]["recent"]
             if accession in recent["accessionNumber"]:
@@ -150,7 +130,6 @@ class SecData:
         return None
 
     def filings(self, company: str, form: str = "10-K", fiscal_year: int | None = None) -> dict:
-        """Which filings of a form a company made: dates, accession numbers, links."""
         ticker, cik, name = self.resolve(company)
         submissions = self.submissions(ticker, cik)
         recent = submissions["filings"]["recent"]
@@ -200,7 +179,6 @@ def _find_concept(facts: dict, concept: str) -> tuple[str, str] | None:
 
 
 def _candidates(facts: dict, concept: str, n: int = 10) -> list[dict]:
-    """Concepts whose name or label share the most words with the query."""
     words = set(re.findall(r"[a-z]+", re.sub(r"([a-z])([A-Z])", r"\1 \2", concept).lower()))
     scored = []
     for taxonomy, entries in facts.items():
@@ -214,7 +192,6 @@ def _candidates(facts: dict, concept: str, n: int = 10) -> list[dict]:
 
 
 def _accession_for(facts: dict, fiscal_year: int) -> str | None:
-    """The 10-K tagged with this fiscal year, by its cover-page facts (as acquisition does)."""
     for taxonomy in ("dei",):
         for entry in facts.get(taxonomy, {}).values():
             for rows in entry.get("units", {}).values():

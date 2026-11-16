@@ -53,10 +53,10 @@ MARKET_SOURCES = {"q:debt", "q:debt_current", "q:short_term_investments", "q:int
 class Market:
     price: float
     price_date: str
-    shares: float  # millions, diluted weighted average, the latest reported quarter
+    shares: float
     debt: float
-    cash: float  # cash and short-term investments
-    interest: float | None  # trailing four quarters
+    cash: float
+    interest: float | None
     refs: dict[str, str]
     exceptions: list[str] = field(default_factory=list)
 
@@ -82,9 +82,6 @@ def peers_of(ticker: str) -> list[str]:
     return sorted(t for t, c in companies.items() if c["sector"] == sector_of(ticker))
 
 
-# --- Inputs --------------------------------------------------------------------------------
-
-
 def market(store: Store, model: Model) -> Market:
     ticker = model.ticker
     prices = store.series(f"px:{ticker}:close")
@@ -103,7 +100,7 @@ def market(store: Store, model: Model) -> Market:
     debt, debt_id = balance("q:debt")
     current, current_id = balance("q:debt_current")
     exceptions = []
-    if debt_id and ":LongTermDebtNoncurrent:" in debt_id:  # only the noncurrent part tagged
+    if debt_id and ":LongTermDebtNoncurrent:" in debt_id:
         debt += current
     cash, cash_id = balance("q:cash")
     sti, sti_id = balance("q:short_term_investments")
@@ -120,11 +117,10 @@ def market(store: Store, model: Model) -> Market:
 
 
 def beta(store: Store, ticker: str, since: str = WINDOW_START) -> tuple[float | None, int]:
-    """OLS beta of monthly total returns (adjusted closes) against SPY, from `since` (spec §3.3)."""
     def monthly(name: str) -> dict[str, float]:
         out = {}
         for day, value in store.series(name):
-            out[day[:7]] = value  # the month's last close
+            out[day[:7]] = value
         return out
 
     stock, index = monthly(f"px:{ticker}:adj_close"), monthly("px:SPY:adj_close")
@@ -153,22 +149,18 @@ def cost_of_capital(store: Store, ticker: str, m: Market, tax_rate: float, v: di
             "kd": kd, "debt_weight": weight, "wacc": wacc}
 
 
-# --- DCF -----------------------------------------------------------------------------------
-
-
 def ufcf(model: Model, quarter: str, tax_rate: float) -> float | None:
     ebitda, sbc = model.value("adj_ebitda", quarter), model.value("sbc", quarter)
     ebit = model.value("operating_income", quarter)
-    capex = model.value("capex", quarter) or 0.0  # ABNB tags none: 0, an exception
+    capex = model.value("capex", quarter) or 0.0
     if None in (ebitda, sbc, ebit):
         return None
     return ebitda - sbc - max(ebit, 0.0) * tax_rate - capex
 
 
 def dcf(model: Model, as_of: str, wacc: float, growth: float, tax_rate: float, v: dict) -> dict:
-    """EV from the forecast quarters' UFCF, then annual years, then a Gordon terminal value."""
     start = date.fromisoformat(as_of)
-    flows = []  # (years from the as-of to mid-period, UFCF)
+    flows = []
     for q in model.forecast:
         value = ufcf(model, q, tax_rate)
         if value is None:
@@ -182,19 +174,16 @@ def dcf(model: Model, as_of: str, wacc: float, growth: float, tax_rate: float, v
     g = rev[1] / rev[0] - 1 if None not in rev and rev[0] else growth
     t_last = flows[-1][0]
     while (t_last + 1) * 1.0 <= v["dcf_years"]:
-        g = growth + (g - growth) * v["annual_fade"]  # fade toward the terminal growth
+        g = growth + (g - growth) * v["annual_fade"]
         annual *= 1 + g
         t_last += 1
         last_year += 1
-        flows.append((t_last - 0.375, annual, f"FY{last_year}"))  # mid-year of the next year
+        flows.append((t_last - 0.375, annual, f"FY{last_year}"))
     explicit = sum(cf / (1 + wacc) ** t for t, cf, _ in flows)
     terminal = annual * (1 + growth) / (wacc - growth) / (1 + wacc) ** t_last
     return {"ev": explicit + terminal, "terminal_share": terminal / (explicit + terminal),
             "years": len(flows), "flows": [[p, t, cf] for t, cf, p in flows],
             "terminal": terminal, "terminal_t": t_last, "last_annual": annual}
-
-
-# --- Valuation -----------------------------------------------------------------------------
 
 
 def target_multiple_base(peer_models: dict[str, Model], peer_markets: dict[str, Market],
@@ -210,7 +199,6 @@ def target_multiple_base(peer_models: dict[str, Model], peer_markets: dict[str, 
 
 
 def value(store: Store, f: Forecast, settings: dict, peer_cache: dict | None = None) -> dict:
-    """valuation.json for one company (its forecast `f`), deterministic for given inputs."""
     v = settings["valuation"]
     model = f.model
     m = market(store, model)
@@ -297,7 +285,6 @@ def value(store: Store, f: Forecast, settings: dict, peer_cache: dict | None = N
 
 
 def peer_forecasts(store: Store, ticker: str, settings: dict, cache: dict | None) -> dict:
-    """Sector peers' forecasts with defaults (no LLM), cached per (ticker, as_of)."""
     cache = {} if cache is None else cache
     defaults = dict(settings, proposer=dict(settings["proposer"], method="defaults"))
     out = {}
@@ -312,7 +299,6 @@ def peer_forecasts(store: Store, ticker: str, settings: dict, cache: dict | None
 
 
 def rank(valuations: dict[str, dict]) -> dict[str, str]:
-    """--all: top third by return Buy, bottom third Sell, else Hold."""
     order = sorted(valuations, key=lambda t: valuations[t]["return"], reverse=True)
     third = len(order) // 3
     return {t: "Buy" if i < third else "Sell" if i >= len(order) - third else "Hold"
@@ -320,7 +306,6 @@ def rank(valuations: dict[str, dict]) -> dict[str, str]:
 
 
 def _rounded(value):
-    """Floats to 10 significant digits: byte-identical output for identical inputs."""
     if isinstance(value, float):
         return float(f"{value:.10g}")
     if isinstance(value, dict):

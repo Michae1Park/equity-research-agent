@@ -1,5 +1,3 @@
-"""The reference grammar (V4 design doc §10.1)."""
-
 import pytest
 
 from era_agent.research.refs import Resolver, parse, xbrl_id
@@ -41,8 +39,8 @@ def test_resolver_reads_v3_and_v4_xbrl_ids(tools):  # noqa: F811
     resolver = Resolver(tools.store, tools.sec)
     v3 = resolver.resolve(FACT)
     assert v3 and v3.fact["value"] == 34550000000
-    start = "2024-09-29"  # the fixture's FY2025 R&D duration
+    start = "2024-09-29"
     assert resolver.resolve(FACT.replace(":2025-09-27", f":{start}/2025-09-27")).fact == v3.fact
     assert resolver.resolve(FACT.replace(":2025-09-27", ":2000-01-01/2025-09-27")) is None
     assert resolver.resolve(ACCESSION).filing["form"] == "10-K"
-    assert resolver.resolve("kpi:AAPL:x:2025Q1") is None  # not built yet
+    assert resolver.resolve("kpi:AAPL:x:2025Q1") is None

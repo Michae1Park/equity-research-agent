@@ -1,12 +1,3 @@
-"""Data acquisition: the corpus 10-Ks (corpus.py) downloaded from SEC EDGAR.
-
-  edgar.py  EDGAR client (fair-access rate limit, retries); one 10-K resolved per fiscal year
-
-Each filing lands in <data_dir>/raw/filings/<TICKER>/FY<year>/ (the document and its
-metadata.json), EDGAR's JSON in raw/edgar/<TICKER>/, and raw/manifest.json lists them all.
-Used by `era fetch`; the build (build.py) reads the filings from there.
-"""
-
 import json
 import logging
 from dataclasses import asdict
@@ -23,8 +14,6 @@ def fetch(
     user_agent: str,
     refresh: bool = False,
 ) -> bool:
-    """Download each company's 10-Ks and record them in raw/manifest.json. A company that fails
-    is logged and skipped; returns False if any did."""
     client = EdgarClient(user_agent)
     manifest_path = data_dir / "raw" / "manifest.json"
     manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}

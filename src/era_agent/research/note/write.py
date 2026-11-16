@@ -1,10 +1,3 @@
-"""S10 writer (design doc §10.2): prose for each slot from its facts only, number-traced.
-
-One LLM call per slot (prompts/section.md, no tools); the number trace (trace.py) checks it;
-one repair turn names the untraced numbers; any sentence that still holds one is dropped from
-the text and logged as an exception (so a draft never carries a figure that has no source).
-"""
-
 import re
 
 from era_agent.models import parse_json
@@ -17,7 +10,6 @@ PROMPT = PROMPTS / "section.md"
 
 
 def fill(sections: list[Section], facts: Facts, llm, max_tokens: int = 1500) -> list[dict]:
-    """Write every slot in place; returns the exceptions (untraced numbers)."""
     system = PROMPT.read_text()
     exceptions = []
     for section in sections:
@@ -47,9 +39,6 @@ def fill(sections: list[Section], facts: Facts, llm, max_tokens: int = 1500) -> 
 
 def repair(section: Section, key: str, facts: Facts, llm, failures: list[str],
            max_tokens: int = 1500) -> None:
-    """One repair turn for a slot the consistency check failed (spec §2.3 requirement 6:
-    sections 1 and 10 only): the writer sees its text and the failures and rewrites it; the
-    number trace then runs as for any slot."""
     block = next((b for b in section.blocks if isinstance(b, Slot) and b.key == key), None)
     if block is None or not block.text:
         return
@@ -65,7 +54,6 @@ def repair(section: Section, key: str, facts: Facts, llm, failures: list[str],
 
 
 def _drop_untraced(text: str, slot_facts: Facts, key: str) -> str:
-    """The text without the sentences whose figures still fail the trace."""
     sentences = re.split(r"(?<=[.!?])\s+", text)
     return " ".join(s for s in sentences if not trace.check(s, slot_facts, key))
 

@@ -1,5 +1,3 @@
-"""The model's formula language (research/model/dsl.py): parse, evaluate, Excel."""
-
 import pytest
 
 from era_agent.research.model.dsl import Cells, DslError, Readers, evaluate, parse, to_excel
@@ -13,7 +11,6 @@ def read(fy=None):
                    assumption=lambda n: {"fade": 0.9}.get(n))
 
 
-# Column F is this quarter; a lag of k quarters is k columns left; fy spans C:F.
 CELLS = Cells(cell=lambda n, k: f"{'FEDCB'[k]}{ROWS[n]}" if k < 5 else None,
               fy=lambda n: f"C{ROWS[n]}:F{ROWS[n]}", assumption=lambda n: f"Assumptions!$C${4}")
 
@@ -42,7 +39,7 @@ def test_fy_sums_the_years_quarters():
 def test_missing_inputs_give_none_not_zero():
     assert evaluate(parse("gb * x"), read()) is None
     assert evaluate(parse("gb / (tr - tr)"), read()) is None
-    assert to_excel(parse("gb[-9]"), CELLS) is None  # before the first column
+    assert to_excel(parse("gb[-9]"), CELLS) is None
 
 
 def test_dependencies():
@@ -68,7 +65,7 @@ def test_first_falls_back_when_an_input_is_missing():
     assert evaluate(parse("first(gb, tr)"), read()) == 100.0
     assert to_excel(parse("first(trips[-4] / gb, @fade)"), CELLS) == (
         "=IFERROR(IF(COUNT(B12,F10)=2,B12/F10,Assumptions!$C$4),Assumptions!$C$4)")
-    assert to_excel(parse("first(gb[-9], tr)"), CELLS) == "=F11"  # a before the first column
+    assert to_excel(parse("first(gb[-9], tr)"), CELLS) == "=F11"
     assert parse("first(gb, tr)").lines == {"gb", "tr"}
 
 

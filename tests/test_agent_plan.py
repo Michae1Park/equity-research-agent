@@ -1,5 +1,3 @@
-"""V4 Investigate (agent/plan.py) with a scripted planner and stub sub-agents."""
-
 import json
 
 from era_agent.agent.loop import Run
@@ -17,8 +15,6 @@ def plan(*subs) -> str:
 
 
 class Stub:
-    """A sub-agent: records the questions it got, answers each with ANSWER."""
-
     def __init__(self, toolbox, fail=False):
         self.toolbox, self.fail, self.asked = toolbox, fail, []
 
@@ -38,7 +34,7 @@ def investigator(tmp_path, replies, fail=False):
 def test_sub_questions_run_alone_then_the_answer_is_combined_and_checked(tmp_path):
     inv, agents = investigator(tmp_path, [
         plan(("What was Apple's R&D expense in fiscal 2025?", "ask")),
-        plan(),  # no follow-ups
+        plan(),
         json.dumps(ANSWER),
     ])
     result = inv.run(QUESTION)
@@ -59,12 +55,12 @@ def test_a_claim_citing_an_id_no_sub_answer_cited_is_unverified(tmp_path):
 
 def test_bad_sub_questions_are_rejected_and_the_plan_cut_to_its_limit(tmp_path):
     inv, agents = investigator(tmp_path, [
-        plan((QUESTION, "research"),  # restates the question
-             ("What is Apple's R&D?", "guess"),  # unknown mode
+        plan((QUESTION, "research"),
+             ("What is Apple's R&D?", "guess"),
              ("What was Apple's R&D in FY2025?", "ask"),
              ("What was Apple's R&D in FY2024?", "ask"),
-             ("What was Apple's R&D in FY2023?", "ask")),  # past max_sub
-        plan(("What was Apple's R&D in FY2025?", "ask"),  # a repeat
+             ("What was Apple's R&D in FY2023?", "ask")),
+        plan(("What was Apple's R&D in FY2025?", "ask"),
              ("What was Apple's revenue in FY2025?", "research")),
         json.dumps(ANSWER),
     ])
@@ -72,7 +68,7 @@ def test_bad_sub_questions_are_rejected_and_the_plan_cut_to_its_limit(tmp_path):
     assert agents["ask"].asked == ["What was Apple's R&D in FY2025?",
                                    "What was Apple's R&D in FY2024?"]
     assert [(s.id, s.follow_up) for s in result.sub_runs][-1] == ("s3", True)
-    assert len(result.log) == 4  # restated, mode, cut, repeat
+    assert len(result.log) == 4
 
 
 def test_an_unusable_plan_falls_back_to_one_research_run(tmp_path):

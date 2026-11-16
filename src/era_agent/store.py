@@ -1,12 +1,3 @@
-"""SQLite storage for filings, sections, chunks (and parent-child children) and embeddings.
-
-Keyword search uses the built-in FTS5; vector search uses the sqlite-vec extension.
-All database access goes through Store, so moving to Postgres + pgvector changes this module.
-
-A Store is bound to an AsOf (asof.py, V4 design doc §2.5): every read of filings, chunks and
-children sees only rows filed strictly before it. V3 opens stores at AsOf.today().
-"""
-
 import json
 import re
 import sqlite3
@@ -71,7 +62,6 @@ CREATE TABLE IF NOT EXISTS meta (
 );
 """
 
-# Parent-child databases only: small children are searched, their parent chunk is returned.
 CHILD_SCHEMA = """
 CREATE TABLE IF NOT EXISTS children (
     id TEXT PRIMARY KEY,
@@ -91,9 +81,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS children_fts
     USING fts5(text, content='children', content_rowid='rowid');
 """
 
-# V4 structured data (design doc §3.1), added by enable_facts(). Every row carries the date it
-# became public (`filed`); reads go through the store's AsOf. Quarters are derived from facts on
-# read (facts/quarters.py), so they always match the store's AsOf.
 FACTS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS facts (
     id TEXT PRIMARY KEY,          -- xbrl:… or ixbrl:… (research/refs.py)
@@ -176,8 +163,6 @@ CREATE TABLE IF NOT EXISTS model_versions (  -- Report mode's saved models (rese
 );
 """
 
-# Older databases lack these columns; add them in place. V3 databases (all 10-Ks) gain the V4
-# form, period and filing-date columns; BACKFILL then dates their chunks from their filing.
 MIGRATIONS = (
     "ALTER TABLE companies ADD COLUMN aliases TEXT NOT NULL DEFAULT '[]'",
     "ALTER TABLE chunks ADD COLUMN pages TEXT",
@@ -217,11 +202,11 @@ class ChunkRecord:
     text: str
     units: str | None
     years_covered: list[int]
-    pages: list[int] | None = None  # V0 chunks: first and last page in the document
-    printed_pages: list[str] | None = None  # the page numbers printed on those pages
+    pages: list[int] | None = None
+    printed_pages: list[str] | None = None
     form: str = "10-K"
     fiscal_period: str = "FY"
-    filed: str | None = None  # the filing's filing_date (set on load)
+    filed: str | None = None
 
 
 @dataclass
@@ -231,7 +216,7 @@ class ChildRecord:
     ticker: str
     fiscal_year: int
     item: str
-    kind: str  # "prose", "row" or "table_title"
+    kind: str
     text: str
     form: str = "10-K"
     fiscal_period: str = "FY"
@@ -254,16 +239,11 @@ class FilingRecord:
 
 
 def id_prefix(ticker: str, fiscal_year: int, fiscal_period: str = "FY", form: str = "10-K") -> str:
-    """A filing's section- and chunk-id prefix (V4 design doc §3.1): <TICKER>-<period>[-<doc>].
-    UBER-FY2025 (10-K, as in V0–V3) · UBER-2026Q2 (10-Q) · UBER-2026Q2-ER (release) ·
-    UBER-FY2025-DEF14A (proxy)."""
     key = f"FY{fiscal_year}" if fiscal_period == "FY" else f"{fiscal_year}{fiscal_period}"
     return f"{ticker}-{key}" + (f"-{form}" if form in ("ER", "DEF14A") else "")
 
 
 def target_key(printed: str) -> str:
-    """A guidance target as a period key: 'Q3 2026' → 2026Q3; 'Full-year 2026', 'FY 2026',
-    'Fiscal Year 2026', '2026' → FY2026. Anything else is kept as printed."""
     year = re.search(r"\b(20\d\d)\b", printed)
     quarter = re.search(r"\bQ([1-4])\b", printed, re.IGNORECASE)
     if not year:
@@ -273,12 +253,9 @@ def target_key(printed: str) -> str:
 
 class Store:
     def __init__(self, path: Path, asof: AsOf | None = None):
-        """`asof`: what reads see. None (V3 and loading only) means AsOf.today(); V4 code
-        always passes one (tests/test_asof.py checks)."""
         self.asof = asof or AsOf.today()
         self.path = path
         path.parent.mkdir(parents=True, exist_ok=True)
-        # Parallel workers (V2 run.py) share one Store; a lock serializes access.
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.db.enable_load_extension(True)
@@ -296,7 +273,7 @@ class Store:
                 try:
                     self.db.execute(statement)
                 except sqlite3.OperationalError:
-                    pass  # already applied
+                    pass
             for statement in backfill:
                 self.db.execute(statement)
 
@@ -304,10 +281,8 @@ class Store:
         with self._lock:
             return self.db.execute(sql, params).fetchall()
 
-    # --- Loading -------------------------------------------------------------------------
 
     def enable_children(self) -> None:
-        """Add the children tables: this becomes a parent-child database."""
         with self._lock:
             self.db.executescript(CHILD_SCHEMA)
             self._migrate(CHILD_MIGRATIONS, CHILD_BACKFILL)
@@ -321,8 +296,6 @@ class Store:
         chunks: list[tuple[ChunkRecord, int]],
         children: list[ChildRecord] = (),
     ) -> None:
-        """Insert one filing: its company, sections ({item: title}), chunks (each with its seq
-        within its Item) and children. For a new database: nothing is replaced."""
         prefix = id_prefix(filing.ticker, filing.fiscal_year, filing.fiscal_period, filing.form)
         with self._lock, self.db:
             db = self.db
@@ -391,7 +364,6 @@ class Store:
     def set_pages(
         self, chunk_id: str, text: str, pages: list[int] | None, printed: list[str] | None
     ) -> bool:
-        """Write a chunk's pages and printed pages; False if no chunk has this id and text."""
         with self._lock, self.db:
             updated = self.db.execute(
                 "UPDATE chunks SET pages = ?, printed_pages = ? WHERE id = ? AND text = ?",
@@ -405,13 +377,10 @@ class Store:
         return bool(updated)
 
     def enable_facts(self) -> None:
-        """Add the V4 tables: facts, market, kpis and guidance."""
         with self._lock:
             self.db.executescript(FACTS_SCHEMA)
 
     def add_facts(self, facts: list) -> int:
-        """Insert facts (facts/xbrl.py Fact); an id already stored is kept. Returns the count
-        inserted."""
         with self._lock, self.db:
             before = self.db.total_changes
             self.db.executemany(
@@ -428,9 +397,6 @@ class Store:
     def facts(
         self, ticker: str, concepts: list[str], dims: dict | None = None, any_dims: bool = False
     ) -> list[dict]:
-        """Visible facts of these concepts (any taxonomy); `dims` None = consolidated only, else
-        exactly these dimensions; `any_dims`: whatever their dimensions (a split ratio is tagged
-        per class of stock). Every restated copy is returned (AsOf.latest picks)."""
         visible, params = self.asof.sql("f")
         dimmed = "" if any_dims else "AND f.dims = ?"
         rows = self._query(
@@ -448,7 +414,6 @@ class Store:
         return dict(rows[0]) | {"dims": json.loads(rows[0]["dims"])} if rows else None
 
     def add_market(self, rows: list[tuple[str, str, float, str]]) -> None:
-        """(series, date, value, published) rows; replaces the table's contents for their series."""
         with self._lock, self.db:
             for series in {r[0] for r in rows}:
                 self.db.execute("DELETE FROM market WHERE series = ?", (series,))
@@ -456,8 +421,6 @@ class Store:
 
     def add_extractions(self, ticker: str, period: str, filed: str, kpis: list, guidance: list,
                         method: str = "llm") -> int:
-        """One release's extract.py rows; replaces what that release loaded before. Returns the
-        rows inserted."""
         with self._lock, self.db:
             self.db.execute("DELETE FROM kpis WHERE ticker = ? AND period = ? AND filed = ?",
                             (ticker, period, filed))
@@ -480,7 +443,6 @@ class Store:
 
     def add_model_version(self, ticker: str, as_of: str, parent_id: str | None,
                           inputs_hash: str, path: str, status: str = "draft") -> str:
-        """Save a report's model version; returns its id (<TICKER>:v<n>)."""
         with self._lock, self.db:
             n = self.db.execute("SELECT COUNT(*) FROM model_versions WHERE ticker = ?",
                                 (ticker,)).fetchone()[0] + 1
@@ -490,15 +452,12 @@ class Store:
             return version
 
     def add_insider_tx(self, ticker: str, rows: list[tuple]) -> int:
-        """Replace the company's Form 4 rows (acquisition/insiders.py parse)."""
         with self._lock, self.db:
             self.db.execute("DELETE FROM insider_tx WHERE ticker = ?", (ticker,))
             self.db.executemany(f"INSERT INTO insider_tx VALUES ({', '.join('?' * 12)})", rows)
             return len(rows)
 
     def insider_summary(self, ticker: str, start: str, end: str) -> dict:
-        """Visible Form 4 activity with transaction dates in [start, end]: open-market shares
-        sold and bought, shares awarded and options exercised (dilution context)."""
         visible, params = self.asof.sql("i")
         rows = self._query(
             f"SELECT code, SUM(shares) AS shares, SUM(shares * COALESCE(price, 0)) AS value, "
@@ -513,7 +472,6 @@ class Store:
                 "transactions": sum(r["n"] for r in rows)}
 
     def model_versions(self, ticker: str) -> list[dict]:
-        """Saved versions visible at the as-of (made strictly before it), oldest first."""
         visible, params = self.asof.sql("v", "as_of")
         rows = self._query(f"SELECT * FROM model_versions v WHERE v.ticker = ? AND {visible} "
                            "ORDER BY v.as_of, v.id", [ticker.upper(), *params])
@@ -524,8 +482,6 @@ class Store:
             self.db.execute("UPDATE model_versions SET status = ? WHERE id = ?", (status, version))
 
     def kpis(self, ticker: str, metric: str | None = None) -> list[dict]:
-        """Visible KPI rows, oldest period first; a later release's copy of a period (a
-        restatement) is returned beside the original."""
         visible, params = self.asof.sql("k")
         rows = self._query(
             f"SELECT * FROM kpis k WHERE k.ticker = ? AND (? IS NULL OR k.metric = ?) AND {visible}"
@@ -535,7 +491,6 @@ class Store:
         return [dict(r) for r in rows]
 
     def guidance(self, ticker: str, metric: str | None = None) -> list[dict]:
-        """Visible guidance rows, in the order issued."""
         visible, params = self.asof.sql("g")
         rows = self._query(
             f"SELECT * FROM guidance g WHERE g.ticker = ? AND (? IS NULL OR g.metric = ?) AND "
@@ -545,8 +500,6 @@ class Store:
         return [dict(r) for r in rows]
 
     def series(self, name: str, start: str | None = None) -> list[tuple[str, float]]:
-        """(date, value) of a market series as known at the store's AsOf: observations dated and
-        published before it, each at its latest visible vintage, oldest first."""
         dated, p1 = self.asof.sql("m", "date")
         published, p2 = self.asof.sql("m", "published")
         rows = self._query(
@@ -563,7 +516,6 @@ class Store:
             if self.has_children():
                 self.db.execute("INSERT INTO children_fts(children_fts) VALUES ('rebuild')")
 
-    # --- Embeddings ----------------------------------------------------------------------
 
     def _has_table(self, name: str) -> bool:
         return bool(
@@ -571,11 +523,9 @@ class Store:
         )
 
     def has_facts(self) -> bool:
-        """A V4 database: enable_facts added the facts, market, kpis and guidance tables."""
         return self._has_table("kpis")
 
     def has_children(self) -> bool:
-        """True for a parent-child database."""
         return self._has_table("children")
 
     def embedding_model(self) -> str | None:
@@ -583,7 +533,6 @@ class Store:
         return rows[0]["value"] if rows else None
 
     def reset_embeddings(self, model: str, dimensions: int) -> None:
-        """Drop all vectors and prepare for a (possibly different) embedding model."""
         with self._lock, self.db:
             for table in ("chunks_vec", "children_vec") if self.has_children() else ("chunks_vec",):
                 self.db.execute(f"DROP TABLE IF EXISTS {table}")
@@ -626,14 +575,12 @@ class Store:
                 ],
             )
 
-    # --- Lookup --------------------------------------------------------------------------
 
     def filing_url(self, ticker: str, fiscal_year: int) -> str | None:
         filing = self.filing(ticker, fiscal_year)
         return filing.source_url if filing else None
 
     def filing(self, ticker: str, fiscal_year: int) -> FilingRecord | None:
-        """The fiscal year's 10-K, if filed before the as-of."""
         visible, params = self.asof.sql("f", "filing_date")
         rows = self._query(
             "SELECT f.*, c.name FROM filings f JOIN companies c USING (ticker) "
@@ -666,7 +613,6 @@ class Store:
         rows = self._query(f"SELECT * FROM chunks WHERE {where} ORDER BY id", params)
         return [_chunk(r) for r in rows]
 
-    # --- Search --------------------------------------------------------------------------
 
     def search(
         self,
@@ -678,7 +624,6 @@ class Store:
         periods: list[str] | None = None,
         forms: list[str] | None = None,
     ) -> list[ChunkRecord]:
-        """Keyword search (BM25) over chunk text, optionally filtered by company, year and item."""
         rows = self._keyword("chunks", query, tickers, fiscal_years, items, k, periods, forms)
         return [_chunk(r) for r in rows]
 
@@ -692,7 +637,6 @@ class Store:
         periods: list[str] | None = None,
         forms: list[str] | None = None,
     ) -> list[ChunkRecord]:
-        """Nearest chunks by cosine distance (brute force; milliseconds at this corpus size)."""
         rows = self._nearest("chunks", vector, tickers, fiscal_years, items, k, periods, forms)
         return [_chunk(r) for r in rows]
 
@@ -706,7 +650,6 @@ class Store:
         periods: list[str] | None = None,
         forms: list[str] | None = None,
     ) -> list[ChildRecord]:
-        """Keyword search (BM25) over children, with the same filters as `search`."""
         rows = self._keyword("children", query, tickers, fiscal_years, items, k, periods, forms)
         return [_child(r) for r in rows]
 
@@ -720,7 +663,6 @@ class Store:
         periods: list[str] | None = None,
         forms: list[str] | None = None,
     ) -> list[ChildRecord]:
-        """Nearest children by cosine distance, with the same filters as `search`."""
         rows = self._nearest("children", vector, tickers, fiscal_years, items, k, periods, forms)
         return [_child(r) for r in rows]
 
@@ -753,7 +695,6 @@ class Store:
         )
 
 
-# Common question words that only add noise to BM25 OR-queries.
 STOPWORDS = {
     "a", "an", "and", "are", "as", "at", "be", "by", "did", "do", "does", "for", "from", "how",
     "in", "is", "it", "its", "of", "on", "or", "the", "to", "was", "were", "what", "which",
@@ -764,8 +705,6 @@ STOPWORDS = {
 def _filters(
     tickers, fiscal_years, items, table: str = "chunks", *, asof: AsOf, periods=None, forms=None
 ) -> tuple[str, list]:
-    """V4 adds `periods` (2026Q2, FY2025: a fiscal year and period) and `forms` (10-K, 10-Q,
-    ER); both None is V3's filter."""
     visible, params = asof.sql(table)
     clauses = [visible]
     for column, values in (
@@ -784,7 +723,6 @@ def _filters(
 
 
 def period_parts(period: str) -> tuple[int, str]:
-    """2026Q2 → (2026, 'Q2'); FY2025 → (2025, 'FY')."""
     key = period.strip().upper().replace(" ", "")
     match = re.fullmatch(r"FY(\d{4})|(\d{4})(Q[1-4])", key)
     if not match:

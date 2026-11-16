@@ -30,9 +30,8 @@ def finds(case: dict) -> list[str]:
 
 
 def check(case: dict, chunks: list[dict]) -> tuple[str, list[str]]:
-    """("ok" | "coarser" | "fail", reasons). Coarser: the path is an ancestor of the expected."""
     keyed = [(c, key(c["text"])) for c in chunks]
-    holders, missing = {}, []  # chunk id → (chunk, its key)
+    holders, missing = {}, []
     for f in finds(case):
         hits = {c["id"]: (c, k) for c, k in keyed if key(f) in k}
         if not hits:

@@ -65,8 +65,7 @@ def main() -> None:
 
 
 def score(html: Path, gt_path: Path, out: Path, chunking: dict) -> None:
-    """Every method's chunks vs the ground truth → scores.json."""
-    from score import score_all  # loads the ground-truth builder
+    from score import score_all
 
     log_path = out / "chunks-log.json"
     log = json.loads(log_path.read_text()) if log_path.exists() else {}

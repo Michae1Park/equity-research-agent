@@ -1,19 +1,3 @@
-"""Multi-turn follow-ups: append vs rewrite (config chat.history), through the web API.
-
-  docker compose up -d                       # vLLM (200k context) + era on :8000
-  python experiments/multiturn/compare.py --no-judge          # 1. answers, with Qwen served
-  docker compose stop vllm && <serve gpt-oss-20b on :8002>     # 2. the separate judge (D-029)
-  python experiments/multiturn/compare.py --judge-only         # 3. judge, write the report
-  options: [--mode research] [--only dash ...] [--rerun] (default: skip finished conversations)
-
-Each conversation runs once per strategy, in its own chat, turn by turn. Per turn it records
-the answer, the rewritten question (rewrite), seconds, tool calls, and the model's input tokens
-(peak and total). Then a separate judge model (gpt-oss-20b, D-029) judges each follow-up pair
-blind, in both orders (A/B then B/A, to cancel position bias): which answer better answers the
-follow-up *as the user meant it in context*.
-Writes output/multiturn/<mode>/results.json and report.md.
-"""
-
 import argparse
 import json
 import re
@@ -28,7 +12,7 @@ OUT = Path(__file__).resolve().parents[2] / "output" / "multiturn"
 STRATEGIES = ("append", "rewrite")
 
 CONVERSATIONS = {
-    "dash": [  # the conversation that started this
+    "dash": [
         "What do you think is the price target for DASH and why?",
         "what other reasons are there besides on based on financial models? Consider macro, "
         "risks, and other factors too",
@@ -59,7 +43,7 @@ CONVERSATIONS = {
         "What about orders?",
         "And average order value?",
     ],
-    "uber-lyft-fcf": [  # company switch
+    "uber-lyft-fcf": [
         "What was Uber's free cash flow over the last twelve months?",
         "What about Lyft?",
         "Which of them converts more of its adjusted EBITDA into free cash flow?",
@@ -69,7 +53,7 @@ CONVERSATIONS = {
         "Which segment drove it?",
         "Is the company still buying back stock?",
     ],
-    "bkng-abnb-switch": [  # turn 2 stands alone: the history must not bend it
+    "bkng-abnb-switch": [
         "What was Booking's room nights growth in the latest quarter?",
         "How has Airbnb's take rate trended over the past year?",
         "How do the two compare on marketing spend as a share of revenue?",
@@ -110,7 +94,6 @@ Reply with JSON only: {{"winner": "A" | "B" | "tie", "why": "<one sentence>"}}""
 
 
 def post_chat(chat_id, mode, question, as_of, strategy) -> dict:
-    """One chat turn; reads the SSE stream until done/error → {chat_id, message, events}."""
     body = json.dumps({"chat_id": chat_id, "mode": mode, "question": question,
                        "as_of": as_of, "history": strategy}).encode()
     req = urllib.request.Request(f"{API}/api/chat", body,
@@ -170,7 +153,6 @@ def complete(prompt: str) -> str:
 
 
 def judge(turns_a, turns_b, i) -> dict:
-    """Follow-up i judged in both orders; a strategy wins only if it wins both ways."""
     context = "\n\n".join(f"User: {t['question']}\nAnalyst: {t['answer'][:3000]}"
                           for t in turns_a[:i])
     q = turns_a[i]["question"]

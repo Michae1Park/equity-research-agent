@@ -1,17 +1,3 @@
-"""V4 market and macro data (design doc §3.2), each value with the date it became public.
-
-  prices  Tiingo daily end-of-day per ticker and SPY (beta): close, split-adjusted close,
-          volume. Public the evening of the trading day, so as-of D sees D-1's close.
-          Licence: internal use only, so nothing here is committed or published (§10)
-  macro   FRED/ALFRED: CPIAUCSL, UMCSENT, RSFSDP with every vintage (realtime_start is when
-          each value was published); DGS10 and DTWEXBGS are not revised, published the next day
-  erp     Damodaran's monthly implied equity risk premium ("T12m with sustainable payout"),
-          taken as published three days after the start of the month it describes
-
-Raw responses are cached under <data_dir>/raw/prices/ and raw/macro/; market_rows() turns them
-into rows for the store's `market` table: (series, date, value, published).
-"""
-
 import json
 import logging
 from datetime import UTC, date, datetime, timedelta
@@ -29,7 +15,7 @@ ERP_URL = "https://pages.stern.nyu.edu/~adamodar/pc/implprem/ERPbymonth.xlsx"
 REVISED = ("CPIAUCSL", "UMCSENT", "RSFSDP")
 UNREVISED = ("DGS10", "DTWEXBGS")
 BENCHMARK = "SPY"
-START = WINDOW_START  # same window as the filings (spec §1.2); beta uses it too (spec §4.3)
+START = WINDOW_START
 ERP_COLUMN = "ERP (T12 m with sustainable payout)"
 ERP_DELAY = timedelta(days=3)
 
@@ -39,7 +25,6 @@ def _day_after(day: str) -> str:
 
 
 def fetch_prices(tickers: list[str], raw: Path, token: str, refresh: bool = False) -> list[str]:
-    """Daily prices per ticker (and SPY) from START to today into raw/prices/<T>.json."""
     problems = []
     for ticker in [*tickers, BENCHMARK]:
         path = raw / "prices" / f"{ticker}.json"
@@ -61,7 +46,6 @@ def fetch_prices(tickers: list[str], raw: Path, token: str, refresh: bool = Fals
 
 
 def fetch_macro(raw: Path, key: str, refresh: bool = False) -> list[str]:
-    """FRED series into raw/macro/<SERIES>.json; revised series with every vintage."""
     problems = []
     for series in (*REVISED, *UNREVISED):
         path = raw / "macro" / f"{series}.json"
@@ -94,18 +78,17 @@ def fetch_erp(raw: Path, refresh: bool = False) -> list[str]:
         return [f"Damodaran ERP: HTTP {response.status_code}"]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(response.content)
-    path.with_name(path.name + ".retrieved").write_text(_now())  # the xlsx can't hold a date
+    path.with_name(path.name + ".retrieved").write_text(_now())
     return []
 
 
 def market_rows(raw: Path) -> list[tuple[str, str, float, str]]:
-    """(series, date, value, published) from the raw caches."""
     rows = []
     for path in sorted((raw / "prices").glob("*.json")):
         ticker = path.stem
         for r in json.loads(path.read_text())["rows"]:
             day = r["date"][:10]
-            published = day  # the close is public that evening, before the next open
+            published = day
             for field, name in (
                 ("close", "close"),
                 ("adjClose", "adj_close"),
@@ -127,7 +110,7 @@ def market_rows(raw: Path) -> list[tuple[str, str, float, str]]:
         rows += erp_rows(erp)
     from era_agent.acquisition.crosscheck import rows as crosscheck_rows
 
-    return rows + crosscheck_rows(raw)  # V4.7: cc:tlc:<license>, cc:bts:<series>
+    return rows + crosscheck_rows(raw)
 
 
 def erp_rows(path: Path) -> list[tuple[str, str, float, str]]:
@@ -136,7 +119,7 @@ def erp_rows(path: Path) -> list[tuple[str, str, float, str]]:
     import openpyxl
 
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore")  # the workbook's unsupported extensions
+        warnings.simplefilter("ignore")
         sheet = openpyxl.load_workbook(path, data_only=True)["Historical ERP"]
     header, *body = list(sheet.iter_rows(values_only=True))
     column = header.index(ERP_COLUMN)

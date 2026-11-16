@@ -1,17 +1,3 @@
-"""S4 assumption proposer (V4 design doc §6.2): the LLM's only influence on the numbers.
-
-A bounded sub-agent (the Ask tools, prompts/propose.md, research.yaml `proposer.budget`) sees a
-driver table: each proposable assumption with its history, default and bounds. It returns
-proposals {driver, value, basis, confidence, rationale, evidence}. Code then
-  - keeps only drivers that are proposable: growth starts (.g0), ratio changes (.shift0) and
-    the fade; never one a guidance anchor solves (the anchor runs after and would undo it);
-  - clips each value to its bounds (growth start: its last-8-quarter range ± 5 points; ratio
-    change: ± the ratio's 8-quarter range plus its band; fade: research.yaml fade_bounds) and
-    logs the clip;
-  - keeps a proposal only if at least one evidence id resolves at the as-of (research/refs.py).
-`proposer.method: defaults` skips the LLM: no overrides (the ablation, §11.3).
-"""
-
 import re
 from dataclasses import asdict, dataclass
 
@@ -30,18 +16,17 @@ GROWTH_SLACK = 0.05
 @dataclass
 class Proposal:
     driver: str
-    value: float  # as applied, after clipping
+    value: float
     proposed: float
     default: float
     clipped: bool
     basis: str
     confidence: str
     rationale: str
-    evidence: list[str]  # the ids that resolved
+    evidence: list[str]
 
 
 def proposable(model: Model, anchored: set[str]) -> dict[str, tuple[float, float]]:
-    """{driver: (low, high)} the proposer may set."""
     out = {}
     for name in model.assumptions:
         if name in anchored:
@@ -65,7 +50,6 @@ def _history(model: Model, line: str) -> list[float]:
 
 def driver_view(model: Model, bounds: dict[str, tuple[float, float]], anchored: dict[str, float],
                 fade_bounds: tuple[float, float]) -> str:
-    """The driver table the proposer reads (§5.3: a view, not the data pack)."""
     quarters = model.history[-8:]
     rows = [f"Company {model.ticker}, model as of {model.as_of}; history {quarters[0]}–"
             f"{quarters[-1]}; first forecast quarter {model.forecast[0]}.", "",
@@ -84,7 +68,6 @@ def driver_view(model: Model, bounds: dict[str, tuple[float, float]], anchored: 
 
 def propose(model: Model, store: Store, anchored: dict[str, float], settings: dict,
             search=None) -> tuple[dict[str, float], list[Proposal], list[dict]]:
-    """(overrides, the applied proposals, exceptions) from the LLM proposer."""
     config = settings["proposer"]
     fade_bounds = tuple(settings["forecast"]["fade_bounds"])
     bounds = proposable(model, set(anchored)) | {"fade": fade_bounds}
@@ -101,7 +84,6 @@ def propose(model: Model, store: Store, anchored: dict[str, float], settings: di
 
 def apply(reply: str, model: Model, bounds: dict[str, tuple[float, float]],
           resolver: Resolver) -> tuple[dict[str, float], list[Proposal], list[dict]]:
-    """Validate, clip and keep the reply's proposals."""
     exceptions: list[dict] = []
     try:
         raw = parse_json(reply)

@@ -1,29 +1,17 @@
-"""What each SEC form looks like to the preprocessor (V4 design doc §3.1): its Items in order,
-where the financial statements live, and the names shown in chunk headers and citations.
-
-  10-K     Items once each; the LLM structure agent labels it (V0)
-  10-Q     Items repeat per Part, so keys carry it: I.1 … I.4, II.1 … II.6; labeled by rules
-  release  an 8-K's EX-99 exhibits (form "ER"): no Items, one pseudo-Item per exhibit
-           (EX99, EX99.2, …); labeled by rules (design doc §3.1)
-  proxy    a DEF 14A (form "DEF14A"): no Items, one pseudo-Item (PROXY) over the whole
-           document; labeled by the release rules
-"""
-
 from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
 class FormSpec:
-    form: str  # the dei:DocumentType value
-    items: tuple[str, ...]  # Item keys, in the form's order (validator V2)
-    statement_homes: frozenset[str]  # Items that may hold the statements (validator V6)
-    item_names: dict[str, str] = field(default_factory=dict)  # for headers and citations
+    form: str
+    items: tuple[str, ...]
+    statement_homes: frozenset[str]
+    item_names: dict[str, str] = field(default_factory=dict)
 
 
 TEN_K = FormSpec(
     form="10-K",
     items=tuple("1 1A 1B 1C 2 3 4 5 6 7 7A 8 9 9A 9B 9C 10 11 12 13 14 15 16".split()),
-    # Some filers put the statements in Item 15 (assembly step A3 moves them into Item 8).
     statement_homes=frozenset({"8", "15"}),
     item_names={
         "1": "Business",

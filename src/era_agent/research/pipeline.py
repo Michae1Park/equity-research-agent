@@ -57,8 +57,6 @@ OUT = ROOT / "output" / "reports"
 
 
 class Meter:
-    """The LLM, counting calls and tokens per step (report.json `timing`)."""
-
     def __init__(self, llm):
         self.llm, self.step, self.usage = llm, "", {}
 
@@ -76,8 +74,6 @@ class Meter:
 
 
 class Clock:
-    """Seconds per step, and LLM usage from the Meter."""
-
     def __init__(self, meter: Meter | None):
         self.meter, self.start, self.steps = meter, time.perf_counter(), {}
         self._last, self._name = self.start, None
@@ -99,8 +95,6 @@ class Clock:
 
 
 class SavedModel:
-    """A saved version's model.json, read like a Model (value, line units)."""
-
     def __init__(self, data: dict):
         self.data = data
         self.units = {x["name"]: x["unit"] for x in data["lines"]}
@@ -114,7 +108,7 @@ def run(db: Path, ticker: str, as_of: str, settings: dict, llm_steps: bool = Tru
         resume: bool = False, search=None, out: Path = OUT) -> dict:
     store = Store(db, AsOf.of(as_of))
     store.enable_facts()
-    if search is not None:  # search what was public at the as-of
+    if search is not None:
         from dataclasses import replace
 
         search = replace(search, decomposer=replace(search.decomposer, store=store),
@@ -137,7 +131,6 @@ def run(db: Path, ticker: str, as_of: str, settings: dict, llm_steps: bool = Tru
         path.write_text(json.dumps(value, indent=1, default=str))
         return value
 
-    # S1–S5: data pack, events, model, proposer, forecast
     from era_agent.evaluation.backtest import releases
 
     by_period = releases(store, ticker)
@@ -156,7 +149,6 @@ def run(db: Path, ticker: str, as_of: str, settings: dict, llm_steps: bool = Tru
         raise RuntimeError(f"layer-2 check failed: {failed}")
     exceptions += layer2.exceptions(model, results) + f.exceptions
 
-    # S6–S7: peers and valuation (the book caches the peers' default models)
     clock.step("S6-S7 peers and valuation")
     book = Book(store, settings)
     book.forecasts[ticker] = f
@@ -167,7 +159,6 @@ def run(db: Path, ticker: str, as_of: str, settings: dict, llm_steps: bool = Tru
         raise RuntimeError(f"valuation check failed: {failed}")
     exceptions += [{"severity": "info", "item": e} for e in valuation["exceptions"]]
 
-    # S8: revisions against the parent version
     clock.step("S8 revisions")
     parents = store.model_versions(ticker)
     parent = parents[-1] if parents else None
@@ -175,7 +166,6 @@ def run(db: Path, ticker: str, as_of: str, settings: dict, llm_steps: bool = Tru
                     if parent else None)
     revisions = _revisions(model, parent, parent_model)
 
-    # S9: debates, one per scenario driver; then the sensitivities, with each debated driver
     clock.step("S9 debates")
     _, template = load_template(model.template, ticker)
     if llm_steps:
@@ -189,7 +179,6 @@ def run(db: Path, ticker: str, as_of: str, settings: dict, llm_steps: bool = Tru
     clock.step("S7 sensitivities")
     sensitivities = _sensitivities(book, ticker, [d["driver"] for d in debates])
 
-    # S10: the note
     clock.step("S10 write")
     facts = Facts()
     prior, prior_ref = _prior(book, ticker, by_period, period)
@@ -210,8 +199,6 @@ def run(db: Path, ticker: str, as_of: str, settings: dict, llm_steps: bool = Tru
         else:
             exceptions += fill(built, facts, llm, budgets["section"]["max_tokens"])
 
-    # Consistency check (spec §2.3 requirement 5): code checks; a failure is an exception row;
-    # the takeaways (section 1) get one repair turn, other sections are never rewritten
     from era_agent.research.note import consistency
 
     def consistent():
@@ -231,7 +218,6 @@ def run(db: Path, ticker: str, as_of: str, settings: dict, llm_steps: bool = Tru
               "No rating or PT is approved until the responsible analyst confirms it.")
     note_md = note_sections.markdown(built, header)
     s10 = next(s for s in built if s.number == 10)
-    # section 10 and section 9's exception count are rewritten at export, once the log is final
     blocks = [b for s in built if s is not s10 for b in s.blocks
               if isinstance(b, str) and b.strip() and not b.startswith("Exceptions: ")]
     slots = [{"key": b.key, "text": b.text, "facts": b.facts} for s in built for b in s.blocks
@@ -246,7 +232,6 @@ def run(db: Path, ticker: str, as_of: str, settings: dict, llm_steps: bool = Tru
          "blocks": blocks, "slot_facts": slots},
         indent=1))
 
-    # S11: export, version, logs; section 10 last, listing the numbered open issues
     clock.step("S11 export")
     elapsed = time.perf_counter() - clock.start
     if elapsed > budgets["run_minutes"] * 60:
@@ -255,19 +240,18 @@ def run(db: Path, ticker: str, as_of: str, settings: dict, llm_steps: bool = Tru
     numbered = [{"id": f"X-{i:02d}", **x} for i, x in enumerate(exceptions, 1)]
     s10.blocks = note_sections.review_blocks(numbered)
     facts.add("exceptions in the log", float(len(numbered)), "count", "exception log")
-    for sev in ("error", "warning", "info"):  # section 9 prints each count beside the total
+    for sev in ("error", "warning", "info"):
         n = sum(x["severity"] == sev for x in numbered)
         if n:
             facts.add(f"{sev} exceptions in the log", float(n), "count", "exception log")
     s9 = next(s for s in built if s.number == 9)
     s9.blocks = [note_sections.exceptions_line(numbered) if isinstance(b, str)
                  and b.startswith("Exceptions: ") else b for b in s9.blocks]
-    # the final line joins the code-written blocks, so a later lint checks it verbatim
     saved = json.loads((folder / "note.json").read_text())
     saved["blocks"].append(note_sections.exceptions_line(numbered))
     (folder / "note.json").write_text(json.dumps(saved, indent=1))
     issues = consistency.open_issues(s10, numbered)
-    if not issues.ok:  # by construction it passes; a failure is logged, never hidden
+    if not issues.ok:
         numbered += [{"id": f"X-{len(numbered) + i:02d}", **x}
                      for i, x in enumerate(consistency.as_exceptions([issues]), 1)]
     note_md = note_sections.markdown(built, header)
@@ -298,11 +282,6 @@ def run(db: Path, ticker: str, as_of: str, settings: dict, llm_steps: bool = Tru
 
 def lint(note_md: str, facts: Facts, blocks: list[str] | None = None,
          slots: list[dict] | None = None, final: bool = True) -> list:
-    """Every number in the note body must trace to a fact; every block code wrote (`blocks`:
-    tables and lines) must read exactly as printed, so a figure changed to another fact's value
-    is still caught; each prose slot's numbers must trace to that slot's own facts (`slots`:
-    {text, facts}), not to any fact in the note. final=False (inside the run): section 9's
-    exception count is not set yet, so its line is skipped."""
     body = note_md.split("\n## ", 1)[1] if "\n## " in note_md else note_md
     out = [trace.Untraced("block changed", b.splitlines()[0][:40]) for b in blocks or []
            if b not in note_md]
@@ -326,8 +305,6 @@ def _events(llm, store, search, ticker, period, budget):
 
 
 def _prior(book, ticker, by_period, period):
-    """Our estimate for the reported quarter (section 2.1): the base forecast made the day
-    after the previous release (design doc §9.2). Section 4's "old" is the parent version."""
     from era_agent.evaluation.backtest import run_day
     from era_agent.research.forecast import next_quarter
 
@@ -364,7 +341,6 @@ def _revisions(model, parent, parent_model) -> list[dict]:
 
 
 def budgets_of(settings: dict) -> dict:
-    """research.yaml `budgets`; a step without one uses the proposer's (older knob files)."""
     default = settings["proposer"]["budget"]
     given = settings.get("budgets") or {}
     return {"events": given.get("events", default), "debate": given.get("debate", default),
@@ -373,8 +349,6 @@ def budgets_of(settings: dict) -> dict:
 
 
 def _sensitivities(book: Book, ticker: str, debated: list[str] = ()) -> list[dict]:
-    """Section 7: the target-year adj. EBITDA and PT effect of a take-rate, growth and cost move,
-    and of a move in each debated driver (spec §2.3: every debated driver has a sensitivity)."""
     f = book.base(ticker)
     base = f.model
     names = sorted(base.assumptions)
@@ -454,7 +428,6 @@ def context(store, f, valuation, events, debates, revisions, results, exceptions
 
 
 def parent_view(parent: dict | None) -> dict | None:
-    """The parent version's id, as-of, rating and price target (section 1's change line)."""
     if not parent:
         return None
     saved = json.loads((Path(parent["path"]) / "valuation.json").read_text())

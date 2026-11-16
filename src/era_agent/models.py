@@ -1,17 +1,3 @@
-"""The model layer: one `complete(messages, tools)` interface over every provider.
-
-V2 generation and the judge only ever call `Model.complete` (the V0 structure agent and agentic
-chunker call vLLM's OpenAI API directly, for schema-constrained decoding). Messages and tool
-schemas use one neutral format, translated here per provider:
-
-    {"role": "user", "content": str}
-    {"role": "assistant", "content": str, "tool_calls": [ToolCall], "provider_content": ...}
-    {"role": "tool", "tool_call_id": str, "name": str, "content": str, "is_error": bool}
-
-Specs: "openai:<model>" (the default: open models on vLLM, or any OpenAI-compatible server at
-`base_url`) or "anthropic:<model id>" (Claude, optional).
-"""
-
 import json
 import os
 import re
@@ -22,7 +8,6 @@ from typing import Protocol
 
 from era_agent.telemetry import logged_complete
 
-# USD per million input / output tokens (Anthropic list prices, 2026-09).
 PRICES = {
     "claude-sonnet-5": (2.00, 10.00),
     "claude-sonnet-5-5": (2.00, 10.00),
@@ -35,7 +20,7 @@ PRICES = {
 class ToolSpec:
     name: str
     description: str
-    parameters: dict  # JSON schema for the arguments
+    parameters: dict
 
 
 @dataclass
@@ -43,7 +28,7 @@ class ToolCall:
     id: str
     name: str
     arguments: dict
-    error: str | None = None  # set when the model's arguments weren't valid JSON
+    error: str | None = None
 
     def to_dict(self) -> dict:
         return {"id": self.id, "name": self.name, "arguments": self.arguments, "error": self.error}
@@ -62,7 +47,6 @@ class Response:
     cost_usd: float = 0.0
 
     def message(self) -> dict:
-        """This response as a neutral assistant message, to append to the conversation."""
         return {
             "role": "assistant",
             "content": self.text,
@@ -80,7 +64,7 @@ class Model(Protocol):
         tools: list[ToolSpec] | None = None,
         system: str | None = None,
         max_tokens: int = 8000,
-        tool_choice: str | None = None,  # "none": no tool calls this turn
+        tool_choice: str | None = None,
     ) -> Response: ...
 
 
@@ -138,7 +122,6 @@ class AnthropicModel:
             latency_s=latency,
             model=self.name,
             stop_reason=response.stop_reason or "",
-            # Replayed verbatim so thinking blocks stay valid in later turns.
             provider_content=[b.to_dict() for b in response.content],
             cost_usd=(input_tokens * price_in + usage.output_tokens * price_out) / 1e6,
         )
@@ -164,7 +147,6 @@ def _anthropic_messages(messages: list[dict]) -> list[dict]:
                 "content": m["content"],
                 "is_error": m.get("is_error", False),
             }
-            # All results for one assistant turn go back in a single user message.
             if result and result[-1]["role"] == "user" and isinstance(result[-1]["content"], list):
                 result[-1]["content"].append(block)
             else:
@@ -179,12 +161,10 @@ def _is_anthropic(message: dict) -> bool:
 
 @dataclass
 class OpenAICompatibleModel:
-    """Open models behind vLLM or Ollama (both speak the OpenAI chat + tool-calling API)."""
-
     model: str
     gpu_hourly_usd: float = 0.0
     base_url: str = "http://localhost:8001/v1"
-    thinking: bool | None = None  # Qwen-style hybrid reasoning: False turns thinking off
+    thinking: bool | None = None
     temperature: float = 0.0
     name: str = field(init=False)
 
@@ -205,8 +185,6 @@ class OpenAICompatibleModel:
         )
 
     def context_window(self) -> int | None:
-        """The server's context length for this model (vLLM's max_model_len), cached; None if
-        the server doesn't say."""
         if not hasattr(self, "_window"):
             try:
                 served = {m.id: m for m in self._client.models.list().data}
@@ -220,8 +198,6 @@ class OpenAICompatibleModel:
         self, messages, tools=None, system=None, max_tokens=8000, tool_choice=None
     ) -> Response:
         kwargs = {}
-        # vLLM keeps tools in the prompt under tool_choice "none", and the model then writes
-        # tool-call markup as text. Earlier tool calls render fine without definitions.
         if tools and tool_choice != "none":
             kwargs["tools"] = [
                 {
@@ -295,7 +271,6 @@ def _openai_messages(messages: list[dict]) -> list[dict]:
 
 
 def strip_reasoning(text: str) -> str:
-    """Drop <think>…</think> blocks some open models leave in their visible output."""
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 
@@ -320,7 +295,6 @@ def get_model(
 
 
 def parse_json(text: str) -> dict:
-    """The JSON object in a model's reply, tolerating code fences and surrounding prose."""
     fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.DOTALL)
     candidate = fenced.group(1) if fenced else text
     start, end = candidate.find("{"), candidate.rfind("}")

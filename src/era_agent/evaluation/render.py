@@ -1,8 +1,3 @@
-"""Render a gold question file as a readable PDF for human review.
-
-HTML is built here and printed with headless Chrome, so there is no extra dependency.
-"""
-
 import re
 import shutil
 import subprocess
@@ -15,7 +10,7 @@ from era_agent.evaluation import gold
 from era_agent.store import Store
 
 CONTEXT_CHARS = 700
-V4_CATEGORIES = (  # the Ask set's (spec §2.1), in this order after V3's
+V4_CATEGORIES = (
     "reported_financials", "operating_kpis", "guidance", "filing_text", "cross_check",
     "our_estimates",
 )
@@ -55,7 +50,6 @@ a { color: #1d4ed8; }
 
 
 def render_pdf(gold_path: Path, store: Store, data_dir: Path, out: Path) -> int:
-    """Write the full review PDF; returns the number of questions rendered."""
     questions = gold.load(gold_path)
     html = build_html(gold_path.name, questions, store, data_dir)
     _print_pdf(html, out)
@@ -63,7 +57,6 @@ def render_pdf(gold_path: Path, store: Store, data_dir: Path, out: Path) -> int:
 
 
 def render_summary_pdf(gold_path: Path, out: Path) -> None:
-    """Write the one-row-per-question overview: category, question and expected answer."""
     _print_pdf(build_summary_html(gold_path.name, gold.load(gold_path)), out)
 
 
@@ -88,7 +81,7 @@ tr.group td { background: #d5dae8; font-weight: 700; font-size: 8.5pt; border-to
 
 
 def build_summary_html(title: str, questions: list[dict]) -> str:
-    order = (*gold.CATEGORIES[:-1], *V4_CATEGORIES, gold.CATEGORIES[-1])  # failures last
+    order = (*gold.CATEGORIES[:-1], *V4_CATEGORIES, gold.CATEGORIES[-1])
     ordered = sorted(
         questions,
         key=lambda q: (
@@ -138,8 +131,6 @@ def _answer(q: dict) -> str:
 
 
 def _who(value: dict) -> str:
-    """What an expected value belongs to: company and fiscal year, or (V4) company, segment
-    and the guidance bound."""
     keys = ("company", "fiscal_year", "segment", "bound")
     return " ".join(str(value[k]) for k in keys if value.get(k) not in (None, "total"))
 
@@ -253,7 +244,7 @@ def _expected(q: dict, checks: list) -> str:
 
 def _source(store: Store, source: dict, chunk_ids: list[str], acceptable: bool) -> str:
     kind = "Acceptable alternative source" if acceptable else "Source"
-    if "period" in source:  # V4: a 10-K, 10-Q or release, by period
+    if "period" in source:
         found = "" if chunk_ids else " · <b class=bad>NOT FOUND</b>"
         meta = (f"<div class=meta><b>{kind}:</b> {escape(source['company'])} "
                 f"{escape(source['period'])} {escape(source['form'])}{found}</div>")
@@ -274,7 +265,6 @@ def _source(store: Store, source: dict, chunk_ids: list[str], acceptable: bool) 
 
 
 def _excerpt(store: Store, source: dict, chunk_ids: list[str], evidence: str) -> str:
-    """The evidence in its surrounding filing text, highlighted; the bare quote if not found."""
     pattern = re.compile(
         r"[\s|$]+".join(re.escape(t) for t in re.split(r"[\s|$]+", evidence.strip()) if t),
         re.IGNORECASE,
