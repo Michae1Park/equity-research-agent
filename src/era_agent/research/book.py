@@ -66,13 +66,13 @@ class Book:
         return f"model:{ticker}:{self.as_of}:{version}:{line}.{period}"
 
     def resolve(self, ticker: str, as_of: str, version: str, key: str) -> dict | None:
-        if SAVED.fullmatch(version):
+        if SAVED_VERSION.fullmatch(version):
             return saved_value(self.store, ticker, as_of, version, key)
         if as_of < self.as_of and version == "base":
             return self.at(as_of).resolve(ticker, as_of, version, key)
         if as_of != self.as_of:
             return None
-        if SAVED.fullmatch(version):
+        if SAVED_VERSION.fullmatch(version):
             return saved_value(self.store, ticker, as_of, version, key)
         if version.startswith("val-"):
             return valuation_field(self.valuation(ticker, version[4:]), key)
@@ -94,7 +94,7 @@ class Book:
         return {"value": value, "unit": unit}
 
 
-SAVED = re.compile(r"v\d+")
+SAVED_VERSION = re.compile(r"v\d+")
 PERIOD = re.compile(r"\d{4}Q[1-4]|FY\d{4}")
 
 

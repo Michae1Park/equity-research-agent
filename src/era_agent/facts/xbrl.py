@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 
 from era_agent.research.refs import xbrl_id
 
-STANDARD = ("us-gaap", "dei", "srt")
+STANDARD_TAXONOMIES = ("us-gaap", "dei", "srt")
 FORMS = ("10-K", "10-Q")
 
 
@@ -114,7 +114,7 @@ def inline_facts(
         if not concept or context is None:
             continue
         start, end, dims = context
-        if not (keep_standard or dims or taxonomy not in STANDARD):
+        if not (keep_standard or dims or taxonomy not in STANDARD_TAXONOMIES):
             continue
         value = _number(element, element.get_text(" ", strip=True))
         if value is None or end is None:

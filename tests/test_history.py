@@ -68,4 +68,4 @@ def test_rewrite_sees_only_recent_turns_that_fit():
 
     history.rewrite(SimpleNamespace(complete=complete), long, "next?")
     assert "q99" in seen["prompt"] and "q0\n" not in seen["prompt"]
-    assert len(seen["prompt"]) < history.REWRITE_CHARS + 2000
+    assert len(seen["prompt"]) < history.REWRITE_HISTORY_CHARS + 2000

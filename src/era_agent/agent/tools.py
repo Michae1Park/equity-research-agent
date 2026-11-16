@@ -17,7 +17,7 @@ PERIODS = {
     "items": {"type": "string"},
     "description": "Period keys, e.g. 2026Q2 or FY2025 (default: the latest eight)",
 }
-ROWS = 40
+MAX_ROWS = 40
 
 SPECS = {
     "search_filings": ToolSpec(
@@ -323,7 +323,7 @@ COVERAGE = {
            "three months after the month (publish dates estimated).",
 }
 
-GROUPS = {
+TOOL_GROUPS = {
     "text": ("search_filings",),
     "calc": ("calculator",),
     "sec": ("xbrl_facts", "edgar_filings"),
@@ -338,7 +338,7 @@ GROUP_SETS = {
     "ask": ("text", "calc", "facts", "market", "reports"),
     "research": ("text", "calc", "facts", "market", "reports", "model"),
 }
-TOOL_SETS = {name: sum((GROUPS[g] for g in groups), ()) for name, groups in GROUP_SETS.items()}
+TOOL_SETS = {name: sum((TOOL_GROUPS[g] for g in groups), ()) for name, groups in GROUP_SETS.items()}
 
 
 @dataclass
@@ -539,7 +539,7 @@ class Toolbox:
             if f.ticker == ticker and (form is None or f.form == form.upper())
         ]
         rows.sort(key=lambda r: r["filing_date"])
-        return {"company": ticker, "filings": rows[-ROWS:], "total": len(rows)}
+        return {"company": ticker, "filings": rows[-MAX_ROWS:], "total": len(rows)}
 
     def market_data(
         self,
@@ -638,8 +638,8 @@ class Toolbox:
                "note": "draft: not yet approved by the senior analyst"
                        if row["status"] == "draft" else "reviewed by the senior analyst",
                "valuation": valuation, "versions": visible,
-               "estimates": estimates[:ROWS]} | (
-                   {"omitted": len(estimates) - ROWS} if len(estimates) > ROWS else {})
+               "estimates": estimates[:MAX_ROWS]} | (
+                   {"omitted": len(estimates) - MAX_ROWS} if len(estimates) > MAX_ROWS else {})
         if unknown:
             out["unknown_lines"] = {"lines": unknown,
                                     "valid": [x["name"] for x in model["lines"]][:60]}
@@ -871,8 +871,8 @@ def _order(period: str) -> tuple:
 
 
 def _cap(rows: list[dict]) -> dict:
-    out = {"rows": rows[-ROWS:]}
-    return out | ({"omitted": len(rows) - ROWS} if len(rows) > ROWS else {})
+    out = {"rows": rows[-MAX_ROWS:]}
+    return out | ({"omitted": len(rows) - MAX_ROWS} if len(rows) > MAX_ROWS else {})
 
 
 def _coerce(arguments: dict, properties: dict) -> dict:

@@ -115,11 +115,11 @@ def forecast(store: Store, ticker: str, settings: dict | None = None,
     for name in sorted(n for n in referenced(model) if n.endswith(".season")):
         line = name[:-len(".season")]
         _, years = seasonal_shares(model, line)
-        if len(years) < SHARE_YEARS:
+        if len(years) < SEASONAL_SHARE_YEARS:
             result.exceptions.append({
                 "severity": "info",
                 "item": f"seasonal share of {line} from {len(years)} complete fiscal year(s) "
-                        f"({', '.join(years) or 'none: even shares'}), not {SHARE_YEARS}"})
+                        f"({', '.join(years) or 'none: even shares'}), not {SEASONAL_SHARE_YEARS}"})
     result.exceptions.append({"severity": "info", "item": "working capital held at 0 in the "
                               "forecast; interest and other non-operating items 0 (§8.3)"})
     return result
@@ -196,7 +196,7 @@ def default_assumptions(model: Model, settings: dict) -> dict[str, float]:
     return out
 
 
-SHARE_YEARS = 3
+SEASONAL_SHARE_YEARS = 3
 
 
 def seasonal_shares(model: Model, line: str) -> tuple[list[float], list[str]]:
@@ -211,7 +211,7 @@ def seasonal_shares(model: Model, line: str) -> tuple[list[float], list[str]]:
         for i, v in enumerate(values):
             shares[i].append(v / sum(values))
         used.append(year)
-        if len(used) == SHARE_YEARS:
+        if len(used) == SEASONAL_SHARE_YEARS:
             break
     if not used:
         return [0.25] * 4, []

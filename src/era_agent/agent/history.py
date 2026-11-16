@@ -4,8 +4,8 @@ from era_agent.prompts import PROMPTS
 
 STRATEGIES = ("auto", "append", "rewrite", "none")
 REWRITE_PROMPT = PROMPTS / "rewrite.md"
-REWRITE_ANSWER_CHARS = 2000
-REWRITE_CHARS = 60000
+REWRITE_CHARS_PER_ANSWER = 2000
+REWRITE_HISTORY_CHARS = 60000
 CHARS_PER_TOKEN = 3
 
 
@@ -62,8 +62,8 @@ def as_context(history: list[dict], question: str) -> str:
 def rewrite(model, history: list[dict], question: str) -> str:
     blocks, size = [], 0
     for t in reversed(history):
-        block = f"User: {t['question']}\nAnalyst: {t['answer'][:REWRITE_ANSWER_CHARS]}"
-        if blocks and size + len(block) > REWRITE_CHARS:
+        block = f"User: {t['question']}\nAnalyst: {t['answer'][:REWRITE_CHARS_PER_ANSWER]}"
+        if blocks and size + len(block) > REWRITE_HISTORY_CHARS:
             break
         blocks.insert(0, block)
         size += len(block)

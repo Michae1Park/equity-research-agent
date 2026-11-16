@@ -18,7 +18,7 @@ from era_agent.prompts import PROMPTS
 
 DROPPED_ROLES = {"cover", "toc", "part_heading", "furniture", "index_table"}
 STATEMENT_KINDS = {"statement", "notes_header", "auditor_report"}
-PRINTED_PAGE = re.compile(r"(?<![\w-])([A-Z]-\d{1,3}|\d{1,3})\s*$")
+PRINTED_PAGE_NUMBER = re.compile(r"(?<![\w-])([A-Z]-\d{1,3}|\d{1,3})\s*$")
 ITEM_PREFIX = re.compile(
     r"^items?\s+\d{1,2}[a-c]?(\s*(,|and|&)\s*\d{1,2}[a-c]?)*\s*[.:]?\s*", re.I
 )
@@ -212,7 +212,7 @@ def assemble(blocks: list[Block], labels: dict[str, dict], filing: dict) -> dict
 def _printed_pages(blocks: list[Block], labels: dict[str, dict]) -> dict[int, str]:
     printed: dict[int, str] = {}
     for b in blocks:
-        if labels[b.id]["role"] == "furniture" and (m := PRINTED_PAGE.search(b.text)):
+        if labels[b.id]["role"] == "furniture" and (m := PRINTED_PAGE_NUMBER.search(b.text)):
             printed[b.page] = m.group(1)
     return printed
 

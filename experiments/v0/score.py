@@ -19,7 +19,7 @@ WHOLE_BLOCK_MIN_COVERAGE = 0.95
 MIN_LINE_CHARS = 8
 FULL_PARENT_FILL_RATIO = 0.8
 
-Cover = dict[int, set[int]]
+ChunkCoverage = dict[int, set[int]]
 
 
 def key(text: str) -> str:
@@ -176,11 +176,11 @@ def score_method(ref: Reference, gt: dict, chunks: list[dict], target: int, pare
     }
 
 
-def _locate_chunks(ref: Reference, chunks: list[dict]) -> list[Cover]:
+def _locate_chunks(ref: Reference, chunks: list[dict]) -> list[ChunkCoverage]:
     covers, anchor = [], 0
     for c in chunks:
         spans = ref.locate(c["text"], anchor)
-        cover: Cover = {}
+        cover: ChunkCoverage = {}
         for s, e in spans:
             for pos in range(s, e):
                 cover.setdefault(ref.block_at(pos), set()).add(pos)
@@ -190,11 +190,11 @@ def _locate_chunks(ref: Reference, chunks: list[dict]) -> list[Cover]:
     return covers
 
 
-def _is_whole(ref: Reference, cover: Cover, i: int) -> bool:
+def _is_whole(ref: Reference, cover: ChunkCoverage, i: int) -> bool:
     return len(cover.get(i, ())) >= WHOLE_BLOCK_MIN_COVERAGE * max(1, ref.blocks[i].locatable)
 
 
-def _criterion_1(ref: Reference, chunks: list[dict], covers: list[Cover]) -> dict:
+def _criterion_1(ref: Reference, chunks: list[dict], covers: list[ChunkCoverage]) -> dict:
     item_ok = 0
     classes = dict.fromkeys(["exact", "merged", "coarse", "wrong"], 0)
     located = [(c, cover) for c, cover in zip(chunks, covers, strict=True) if cover]
@@ -207,7 +207,7 @@ def _criterion_1(ref: Reference, chunks: list[dict], covers: list[Cover]) -> dic
     }
 
 
-def path_class(ref: Reference, chunk: dict, idx: list[int], cover: Cover) -> str:
+def path_class(ref: Reference, chunk: dict, idx: list[int], cover: ChunkCoverage) -> str:
     idx = [i for i in idx if not ref.blocks[i].label] or idx
     paths = [tuple(ref.blocks[i].path) for i in idx]
     keep = [
@@ -230,7 +230,7 @@ def path_class(ref: Reference, chunk: dict, idx: list[int], cover: Cover) -> str
 
 
 def _criterion_2(
-    ref: Reference, gt: dict, chunks: list[dict], covers: list[Cover], target: int
+    ref: Reference, gt: dict, chunks: list[dict], covers: list[ChunkCoverage], target: int
 ) -> dict:
     units = [
         u for u in (gt["risk_factors"] or {"units": []})["units"] if u["kind"] == "risk_factor"
@@ -292,7 +292,7 @@ def _criterion_3(chunks: list[dict], parent: int) -> dict:
     }
 
 
-def _sanity_checks(ref: Reference, chunks: list[dict], covers: list[Cover]) -> dict:
+def _sanity_checks(ref: Reference, chunks: list[dict], covers: list[ChunkCoverage]) -> dict:
     covered = set().union(*(positions for cover in covers for positions in cover.values()))
     noise = sum(
         key(line) in ref.furniture for c in chunks for line in c["text"].split("\n") if key(line)

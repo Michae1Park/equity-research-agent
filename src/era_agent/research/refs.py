@@ -6,7 +6,7 @@ from era_agent.store import ChunkRecord, Store
 
 ACCESSION = re.compile(r"^\d{10}-\d{2}-\d{6}$")
 EVIDENCE = re.compile(r"^[EX]-\d+$")
-PREFIXED = {
+REF_PREFIXES = {
     "xbrl": ("xbrl", 5),
     "ixbrl": ("ixbrl", 2),
     "q": ("quarter", 3),
@@ -49,8 +49,8 @@ def parse(ref_id: str) -> Ref:
     if EVIDENCE.match(ref_id):
         return Ref("evidence", ref_id)
     prefix, _, rest = ref_id.partition(":")
-    if prefix in PREFIXED and rest:
-        kind, count = PREFIXED[prefix]
+    if prefix in REF_PREFIXES and rest:
+        kind, count = REF_PREFIXES[prefix]
         parts = tuple(rest.split(":"))
         if len(parts) == count:
             return Ref(kind, ref_id, parts)
@@ -129,9 +129,9 @@ class Resolver:
         return Resolved(ref, values=values, extra=row)
 
     def _model(self, ref: Ref, ticker: str, as_of: str, version: str, key: str):
-        from era_agent.research.book import SAVED, saved_value
+        from era_agent.research.book import SAVED_VERSION, saved_value
 
-        if SAVED.fullmatch(version):
+        if SAVED_VERSION.fullmatch(version):
             found = saved_value(self.store, ticker, as_of, version, key)
         else:
             found = self.book.resolve(ticker, as_of, version, key) if self.book else None

@@ -8,7 +8,7 @@ OPERATORS = {ast.Add: "+", ast.Sub: "-", ast.Mult: "*", ast.Div: "/", ast.Pow: "
 COMPARE = {ast.Lt: "<", ast.LtE: "<=", ast.Gt: ">", ast.GtE: ">=", ast.Eq: "=", ast.NotEq: "<>"}
 BINARY = {ast.Add: lambda a, b: a + b, ast.Sub: lambda a, b: a - b,
           ast.Mult: lambda a, b: a * b, ast.Div: lambda a, b: a / b, ast.Pow: lambda a, b: a**b}
-YEAR = ("fy", "fyp")
+FY_FUNCTIONS = ("fy", "fyp")
 ASSUMPTION = re.compile(r"@([A-Za-z_][\w.]*)")
 
 
@@ -24,7 +24,7 @@ class Expr:
     @property
     def lines(self) -> set[str]:
         return {n.id for n in ast.walk(self.tree) if isinstance(n, ast.Name)
-                and n.id not in (*FUNCTIONS, *YEAR, "first") and not n.id.startswith("A__")}
+                and n.id not in (*FUNCTIONS, *FY_FUNCTIONS, "first") and not n.id.startswith("A__")}
 
     @property
     def same_period(self) -> set[str]:
@@ -34,7 +34,7 @@ class Expr:
             if isinstance(node, ast.Subscript):
                 walk(node.value, True)
                 return
-            if isinstance(node, ast.Call) and getattr(node.func, "id", "") in YEAR:
+            if isinstance(node, ast.Call) and getattr(node.func, "id", "") in FY_FUNCTIONS:
                 return
             if isinstance(node, ast.Name) and not lagged and node.id in self.lines:
                 out.add(node.id)
@@ -70,9 +70,9 @@ def _check(node: ast.AST, text: str) -> None:
         raise DslError(f"{text!r}: only numbers")
     if isinstance(node, ast.Call):
         name = getattr(node.func, "id", None)
-        if name not in (*FUNCTIONS, *YEAR, "first") or node.keywords:
+        if name not in (*FUNCTIONS, *FY_FUNCTIONS, "first") or node.keywords:
             raise DslError(f"{text!r}: unknown function {name!r}")
-        if name in YEAR and (len(node.args) != 1 or not isinstance(node.args[0], ast.Name)):
+        if name in FY_FUNCTIONS and (len(node.args) != 1 or not isinstance(node.args[0], ast.Name)):
             raise DslError(f"{text!r}: {name}() takes one line")
         if name == "first" and len(node.args) != 2:
             raise DslError(f"{text!r}: first(a, b)")
@@ -204,9 +204,9 @@ def _xl(node, cells: Cells, top: bool = False) -> str:
 def _refs(node, cells: Cells) -> list[str]:
     out = []
     in_year = {id(a) for n in ast.walk(node) if isinstance(n, ast.Call)
-               and getattr(n.func, "id", "") in YEAR for a in n.args}
+               and getattr(n.func, "id", "") in FY_FUNCTIONS for a in n.args}
     for n in ast.walk(node):
-        if isinstance(n, ast.Call) and getattr(n.func, "id", "") in YEAR:
+        if isinstance(n, ast.Call) and getattr(n.func, "id", "") in FY_FUNCTIONS:
             year = cells.fy if n.func.id == "fy" else cells.fy_prev
             out.append(_ref(year(n.args[0].id)))
         elif id(n) in in_year:
@@ -215,8 +215,8 @@ def _refs(node, cells: Cells) -> list[str]:
             out.append(cells.cell(n.value.id, n.slice.operand.value))
         elif isinstance(n, ast.Name) and n.id.startswith("A__"):
             out.append(cells.assumption(n.id[3:].replace("__", ".")))
-        elif isinstance(n, ast.Name) and n.id not in (*FUNCTIONS, *YEAR, "first") and not any(
-                isinstance(p, ast.Subscript) and p.value is n for p in ast.walk(node)):
+        elif isinstance(n, ast.Name) and n.id not in (*FUNCTIONS, *FY_FUNCTIONS, "first") \
+                and not any(isinstance(p, ast.Subscript) and p.value is n for p in ast.walk(node)):
             out.append(cells.cell(n.id, 0))
     return list(dict.fromkeys(out))
 

@@ -325,7 +325,7 @@ def test_search_filings_runs_v1_retrieval_and_asks_for_companies(tmp_path):
 
 
 def test_tool_sets_are_built_from_groups_in_v3_order():
-    from era_agent.agent.tools import GROUPS, TOOL_SETS
+    from era_agent.agent.tools import TOOL_GROUPS, TOOL_SETS
 
     assert TOOL_SETS == {
         "text": ("search_filings", "calculator"),
@@ -336,7 +336,7 @@ def test_tool_sets_are_built_from_groups_in_v3_order():
                      "filings", "market_data", "crosscheck", "research_report", "model_view",
                      "run_scenario", "compare_peers", "variance_review"),
     }
-    assert {t for tools in GROUPS.values() for t in tools} == set(TOOL_SETS["full"]) | set(
+    assert {t for tools in TOOL_GROUPS.values() for t in tools} == set(TOOL_SETS["full"]) | set(
         TOOL_SETS["research"]
     )
 

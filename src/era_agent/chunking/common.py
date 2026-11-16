@@ -11,7 +11,7 @@ CANDIDATE_SIZE: int
 CAPTION_CHARS: int
 TABLE_CHARS: int
 OVERLAP_CHARS: int
-YEAR = re.compile(r"\b(20[0-3]\d)\b")
+YEAR_PATTERN = re.compile(r"\b(20[0-3]\d)\b")
 SENTENCE_END = re.compile(r"[.;]\s+")
 ABBREVIATION = re.compile(r"(?:^|[\s(])(?:U\.S|U\.K|Inc|Corp|Co|Ltd|No|Nos|e\.g|i\.e|vs)\.$")
 NUMERIC_CELL = re.compile(r"\(?\$?\s*\(?[\d,]*\.?\d+\)?\s*%?\)?")
@@ -84,7 +84,7 @@ def make_chunk(section: dict, kind: str, text: str, blocks: list[dict], **extra)
         top = "\n".join(text.splitlines()[:6])
         chunk |= {
             "units": table.get("units"),
-            "years_covered": sorted({int(y) for y in YEAR.findall(top)}),
+            "years_covered": sorted({int(y) for y in YEAR_PATTERN.findall(top)}),
         }
     return chunk | extra
 
@@ -164,7 +164,7 @@ def row_children(rows: list[list[str]]) -> dict[int, str]:
     widest = max(header, key=len) if header else []
     data_width = max((len(r) for r in rows[len(header) :]), default=0)
     columns = widest[1:] if widest and len(widest) >= data_width else widest
-    years = [c for c in columns if YEAR.search(c)]
+    years = [c for c in columns if YEAR_PATTERN.search(c)]
 
     out, group = {}, ""
     for n, r in enumerate(rows[len(header) :], start=len(header)):

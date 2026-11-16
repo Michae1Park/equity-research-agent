@@ -8,7 +8,7 @@ from era_agent.retrieval.index import load
 from era_agent.store import Store
 from test_store import APPLE, filing
 
-FILED = "2025-11-01"
+FILING_DATE = "2025-11-01"
 
 
 def test_strictly_before():
@@ -33,7 +33,7 @@ def test_latest_takes_the_newest_visible_restatement():
 def test_leak_store_sees_nothing_from_a_filing_until_the_day_after(tmp_path):
     load(tmp_path / "t.db", [filing("AAPL", 2025, "2025-09-27", APPLE)])
     chunk_id = Store(tmp_path / "t.db").chunks()[0].id
-    for asof, visible in ((AsOf.of(FILED), False), (AsOf.after(FILED), True)):
+    for asof, visible in ((AsOf.of(FILING_DATE), False), (AsOf.after(FILING_DATE), True)):
         store = Store(tmp_path / "t.db", asof)
         found = [
             store.chunks(), store.search("tariffs"), store.child_search("research"),
@@ -47,8 +47,8 @@ def test_chunks_carry_form_period_and_filing_date(tmp_path):
     load(tmp_path / "t.db", [filing("AAPL", 2025, "2025-09-27", APPLE)])
     store = Store(tmp_path / "t.db")
     chunk = store.chunks()[0]
-    assert (chunk.form, chunk.fiscal_period, chunk.filed) == ("10-K", "FY", FILED)
-    assert {c.filed for c in store.child_search("research")} == {FILED}
+    assert (chunk.form, chunk.fiscal_period, chunk.filed) == ("10-K", "FY", FILING_DATE)
+    assert {c.filed for c in store.child_search("research")} == {FILING_DATE}
     assert store.filings()[0].form == "10-K"
 
 

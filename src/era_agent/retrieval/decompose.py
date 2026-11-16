@@ -88,7 +88,7 @@ def slots(
 ASKS_WHICH_COMPANY = re.compile(
     r"\b(which|what)\s+(of\s+the\s+)?(compan(y|ies)|firms?)\b|\bwhose\b", re.IGNORECASE
 )
-LIST_GLUE = re.compile(r"^\s*(,|,?\s*and|,?\s*or|&)\s*$")
+LIST_SEPARATOR = re.compile(r"^\s*(,|,?\s*and|,?\s*or|&)\s*$")
 DANGLING = re.compile(r"\b(of|for|between|from|by)\s+(?=[\s:?.,]|$)", re.IGNORECASE)
 
 
@@ -134,7 +134,7 @@ class QueryDecomposer:
         found = mentions(question)
         runs: list[list[Mention]] = []
         for m in found:
-            if runs and LIST_GLUE.match(question[runs[-1][-1].end : m.start]):
+            if runs and LIST_SEPARATOR.match(question[runs[-1][-1].end : m.start]):
                 runs[-1].append(m)
             else:
                 runs.append([m])

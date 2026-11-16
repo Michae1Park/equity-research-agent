@@ -14,7 +14,7 @@ from era_agent.retrieval.index import add_pages, embed_corpus, load
 from era_agent.store import Store
 
 STAGES = ("chunk", "load", "append", "embed", "pages", "facts", "market", "kpis")
-KPIS = Path("output/extraction/v4.8-releases-all/extractions.json")
+KPI_EXTRACTIONS = Path("output/extraction/v4.8-releases-all/extractions.json")
 
 
 def filing_dirs(
@@ -183,4 +183,4 @@ def build(filings: list[Path], out: Path, settings: dict, methods, stages, jobs:
             facts_db(method, filings, out, WINDOW_START)
     if "kpis" in stages:
         for method in methods:
-            kpis_db(method, out, Path(settings.get("build", {}).get("kpis", KPIS)))
+            kpis_db(method, out, Path(settings.get("build", {}).get("kpis", KPI_EXTRACTIONS)))

@@ -7,13 +7,13 @@ OUT = ROOT / "evaluation" / "gold" / "research-gold.jsonl"
 AS_OF = "2026-09-01"
 NAMES = {"ABNB": "Airbnb", "BKNG": "Booking Holdings", "CART": "Instacart", "DASH": "DoorDash",
          "EXPE": "Expedia", "LYFT": "Lyft", "TRIP": "Tripadvisor", "UBER": "Uber"}
-MAIN = {
+MAIN_KPI = {
     "UBER": ("gross_bookings", "gross bookings"), "LYFT": ("gross_bookings", "gross bookings"),
     "DASH": ("gross_bookings", "Marketplace GOV"), "CART": ("gross_bookings", "GTV"),
     "BKNG": ("volume", "room nights"), "EXPE": ("gross_bookings", "gross bookings"),
     "ABNB": ("volume", "nights and experiences booked"), "TRIP": ("revenue", "revenue"),
 }
-RATE = {
+RATE_DRIVER = {
     "UBER": ("take_rate_mobility.shift0", "Mobility take rate falls 50 bps"),
     "TRIP": ("adj_ebitda_margin.shift0", "adjusted EBITDA margin is 100 bps lower"),
 }
@@ -41,7 +41,7 @@ def add(qid, ticker, category, question, refs, tools, notes=""):
 
 
 for t, name in NAMES.items():
-    main_line, main_name = MAIN[t]
+    main_line, main_name = MAIN_KPI[t]
     low = t.lower()
     add(f"{low}-forecast-revenue-2026q3", t, "forecast",
         f"What do we expect for {name}'s Q3 2026 revenue, and how does it compare with the "
@@ -52,7 +52,7 @@ for t, name in NAMES.items():
     add(f"{low}-forecast-ebitda-2027", t, "forecast",
         f"What is our 2027E adjusted EBITDA for {name}, and what margin does that imply?",
         [ref(t, "base", "adj_ebitda.FY2027")], ["model_view"])
-    driver, words = RATE.get(t, ("take_rate.shift0", "take rate falls 50 bps"))
+    driver, words = RATE_DRIVER.get(t, ("take_rate.shift0", "take rate falls 50 bps"))
     add(f"{low}-scenario-rate", t, "scenario",
         f"If {name}'s {words}, what happens to 2027E adjusted EBITDA and our price target?",
         [ref(t, r"scratch-\d+", "adj_ebitda.FY2027"),

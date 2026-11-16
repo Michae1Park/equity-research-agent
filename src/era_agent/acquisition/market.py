@@ -15,7 +15,7 @@ ERP_URL = "https://pages.stern.nyu.edu/~adamodar/pc/implprem/ERPbymonth.xlsx"
 REVISED = ("CPIAUCSL", "UMCSENT", "RSFSDP")
 UNREVISED = ("DGS10", "DTWEXBGS")
 BENCHMARK = "SPY"
-START = WINDOW_START
+PRICE_HISTORY_START = WINDOW_START
 ERP_COLUMN = "ERP (T12 m with sustainable payout)"
 ERP_DELAY = timedelta(days=3)
 
@@ -33,7 +33,7 @@ def fetch_prices(tickers: list[str], raw: Path, token: str, refresh: bool = Fals
         response = httpx.get(
             TIINGO.format(ticker=ticker),
             timeout=60,
-            params={"startDate": START, "format": "json"},
+            params={"startDate": PRICE_HISTORY_START, "format": "json"},
             headers={"Authorization": f"Token {token}"},
         )
         if response.status_code != 200:
@@ -55,10 +55,10 @@ def fetch_macro(raw: Path, key: str, refresh: bool = False) -> list[str]:
             "series_id": series,
             "api_key": key,
             "file_type": "json",
-            "observation_start": START,
+            "observation_start": PRICE_HISTORY_START,
         }
         if series in REVISED:
-            params |= {"realtime_start": START, "realtime_end": "9999-12-31"}
+            params |= {"realtime_start": PRICE_HISTORY_START, "realtime_end": "9999-12-31"}
         response = httpx.get(FRED, params=params, timeout=60)
         if response.status_code != 200:
             problems.append(f"FRED {series}: HTTP {response.status_code} {response.text[:200]}")

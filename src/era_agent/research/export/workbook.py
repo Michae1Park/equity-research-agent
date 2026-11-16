@@ -14,11 +14,11 @@ from era_agent.research.model.graph import Model, expr_for, season
 BLUE, BLACK = Font(color="0000FF"), Font(color="000000")
 HEADER = Font(bold=True)
 SECTION = PatternFill("solid", fgColor="D9DEE8")
-FORECAST = PatternFill("solid", fgColor="F3F6FB")
+FORECAST_FILL = PatternFill("solid", fgColor="F3F6FB")
 STATEMENTS = (("operating", "Operating build"), ("income", "Income statement"),
               ("cash_flow", "Cash flow"), ("balance", "Balance sheet"))
 FORMATS = {"fraction": "0.0%", "USD per share": "0.00", "USD": "#,##0.00"}
-FIRST_COLUMN = 3
+FIRST_PERIOD_COLUMN = 3
 
 
 def write(model: Model, path: Path) -> Path:
@@ -26,7 +26,7 @@ def write(model: Model, path: Path) -> Path:
     sheet = book.active
     sheet.title = "Model"
     rows = layout(model, sheet)
-    column_of = {c: FIRST_COLUMN + i for i, c in enumerate(model.columns)}
+    column_of = {c: FIRST_PERIOD_COLUMN + i for i, c in enumerate(model.columns)}
     cells = _cells(model, rows, column_of, assumptions_tab(model, book))
     for line in model.lines:
         for column in model.columns:
@@ -41,7 +41,7 @@ def write(model: Model, path: Path) -> Path:
             elif cell.value is not None:
                 target.value, target.font = formula(model, line, column, cells), BLACK
                 if column in model.forecast:
-                    target.fill = FORECAST
+                    target.fill = FORECAST_FILL
     path.parent.mkdir(parents=True, exist_ok=True)
     book.save(path)
     return path
@@ -52,7 +52,7 @@ def layout(model: Model, sheet) -> dict[str, int]:
     sheet.cell(2, 1, "line").font = HEADER
     sheet.cell(2, 2, "unit").font = HEADER
     for i, column in enumerate(model.columns):
-        sheet.cell(2, FIRST_COLUMN + i, column).font = HEADER
+        sheet.cell(2, FIRST_PERIOD_COLUMN + i, column).font = HEADER
     sheet.column_dimensions["A"].width = 44
     rows, row = {}, 3
     for key, title in STATEMENTS:
@@ -60,7 +60,7 @@ def layout(model: Model, sheet) -> dict[str, int]:
         if not lines:
             continue
         sheet.cell(row, 1, title).font = HEADER
-        for col in range(1, FIRST_COLUMN + len(model.columns)):
+        for col in range(1, FIRST_PERIOD_COLUMN + len(model.columns)):
             sheet.cell(row, col).fill = SECTION
         row += 1
         for line in lines:
@@ -136,7 +136,7 @@ def parity(model: Model, path: Path) -> tuple[int, list[str]]:
     checked, differ = 0, []
     for line in model.lines:
         for i, column in enumerate(model.columns):
-            cell = formulas.cell(rows[line.name], FIRST_COLUMN + i)
+            cell = formulas.cell(rows[line.name], FIRST_PERIOD_COLUMN + i)
             if not (isinstance(cell.value, str) and cell.value.startswith("=")):
                 continue
             checked += 1

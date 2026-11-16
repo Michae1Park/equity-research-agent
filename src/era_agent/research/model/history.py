@@ -25,10 +25,10 @@ TEMPLATE_OF = {
     "DASH": "orders", "LYFT": "orders", "CART": "orders",
     "TRIP": "trip",
 }
-FIRST_QUARTER = "2023Q1"
+FIRST_HISTORY_QUARTER = "2023Q1"
 
 
-def quarters_before(as_of: str, first: str = FIRST_QUARTER) -> list[str]:
+def quarters_before(as_of: str, first: str = FIRST_HISTORY_QUARTER) -> list[str]:
     year, q = int(first[:4]), int(first[5])
     out = []
     while True:

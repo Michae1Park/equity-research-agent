@@ -13,7 +13,7 @@ from era_agent.store import Store
 DB = Path("data/v4/build/parent_child.db")
 GOLD = Path("evaluation/gold/extraction-gold.jsonl")
 OUT = Path("output/extraction")
-FILED = {}
+FILING_DATES = {}
 
 
 def main() -> None:

@@ -34,8 +34,8 @@ from era_agent.corpus import COMPANIES, DATA_DIR, FISCAL_YEARS, WINDOW_START, co
 from era_agent.store import ChunkRecord, Store
 
 GOLD = Path("evaluation/gold/generation-gold-fy2025.jsonl")
-RUNS = Path("output/generation")
-RESULTS = Path("evaluation/results")
+GENERATION_RUNS = Path("output/generation")
+EVALUATION_RESULTS = Path("evaluation/results")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -108,10 +108,10 @@ def main(argv: list[str] | None = None) -> int:
     verify.add_argument("--by", required=True, help="reviewer initials")
 
     report = commands.add_parser("report", help="a V2 run's end-to-end report")
-    report.add_argument("label", help=f"a run in {RUNS}/")
+    report.add_argument("label", help=f"a run in {GENERATION_RUNS}/")
     report.add_argument("--gold", type=Path, default=GOLD, help="default: %(default)s")
     report.add_argument("--context", default="retrieved", help="default: %(default)s")
-    report.add_argument("--out", type=Path, help=f"default: {RESULTS}/<label>")
+    report.add_argument("--out", type=Path, help=f"default: {EVALUATION_RESULTS}/<label>")
 
     companies = commands.add_parser("companies", help="V4: the coverage in companies.yaml")
     companies.add_argument("action", choices=("verify",))
@@ -563,9 +563,9 @@ def _report(args: argparse.Namespace, settings: dict) -> int:
     from era_agent.evaluation import gold
     from era_agent.evaluation.report import build_report
 
-    run_dir = RUNS / args.label
+    run_dir = GENERATION_RUNS / args.label
     if not (run_dir / "results.json").exists():
-        print(f"No run {args.label!r} in {RUNS}/", file=sys.stderr)
+        print(f"No run {args.label!r} in {GENERATION_RUNS}/", file=sys.stderr)
         return 1
     used = yaml.safe_load((run_dir / "config.yaml").read_text())
     questions = gold.load(args.gold)
@@ -573,7 +573,7 @@ def _report(args: argparse.Namespace, settings: dict) -> int:
         questions = [q | {"acceptable_sources": []} for q in questions]
     rows = json.loads((run_dir / "results.json").read_text())
     text = build_report(args.label, rows, questions, Store(Path(used["run"]["db"])), args.context)
-    out = args.out or RESULTS / args.label
+    out = args.out or EVALUATION_RESULTS / args.label
     out.mkdir(parents=True, exist_ok=True)
     (out / "report.md").write_text(text)
     shutil.copy(run_dir / "scores.json", out / "scores.json")

@@ -34,7 +34,7 @@ UNITS = re.compile(r"in (millions|thousands|billions)", re.I)
 NUMBER = re.compile(
     r"^[\s$(]*-?[\d.,]+\s*[)%]*\s*$"
 )
-MAX_HEADING = 300
+MAX_HEADING_CHARS = 300
 ITEM8_TOP = re.compile(
     r"^(index to .*financial statements|notes to .*financial statements"
     r"|report of independent registered|consolidated (statements?|balance sheets?)\b)",
@@ -109,7 +109,7 @@ def heading_text(block: dict) -> tuple[str, str] | None:
     runs_ = [(e, t) for e, t in block["runs"] if t]
     styles = {e for e, _ in runs_ if re.search(r"\w", _)}
     text = block["text"]
-    if styles and "-" not in styles and len(text) <= MAX_HEADING:
+    if styles and "-" not in styles and len(text) <= MAX_HEADING_CHARS:
         style = styles.pop() if len(styles) == 1 else "B"
         if text.isupper():
             style += "-caps"
@@ -119,7 +119,7 @@ def heading_text(block: dict) -> tuple[str, str] | None:
     first_style, first = runs_[0]
     if (
         first_style != "-"
-        and len(first) <= MAX_HEADING
+        and len(first) <= MAX_HEADING_CHARS
         and re.search(r"[.:]$", first)
         and len(runs_) > 1
     ):

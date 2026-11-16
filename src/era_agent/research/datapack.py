@@ -6,7 +6,7 @@ from era_agent.store import Store
 
 SPLIT = "StockholdersEquityNoteStockSplitConversionRatio1"
 CLASS_AXIS = "us-gaap:StatementClassOfStockAxis"
-SCALE = {"USD": 1e6, "shares": 1e6}
+TO_MILLIONS = {"USD": 1e6, "shares": 1e6}
 UNITS = {"USD": "USD millions", "shares": "count millions", "USD/shares": "USD per share"}
 
 
@@ -31,8 +31,9 @@ def build(store: Store, ticker: str, sources: set[str]) -> dict[str, dict[str, P
         if kind == "q":
             for q in derive(store, ticker, key, specs[key]):
                 period = f"FY{q.fiscal_year}" if q.period == "FY" else f"{q.fiscal_year}{q.period}"
-                series[period] = Point(q.value / SCALE.get(q.unit, 1), UNITS.get(q.unit, q.unit),
-                                       q.id, q.filed, q.derivation)
+                millions = q.value / TO_MILLIONS.get(q.unit, 1)
+                unit = UNITS.get(q.unit, q.unit)
+                series[period] = Point(millions, unit, q.id, q.filed, q.derivation)
             if specs[key].get("class_of_stock"):
                 _by_class(store, ticker, specs[key]["concepts"], series)
             if specs[key]["kind"] in ("per_share", "shares"):

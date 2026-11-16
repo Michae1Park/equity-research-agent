@@ -20,7 +20,7 @@ def cf(concept, *rows):
     return {"facts": {"us-gaap": {concept: {"units": {"USD": list(rows)}}}}}
 
 
-YEAR = [
+YTD_OPERATING_CASH_FLOW = [
     row("2025-01-01", "2025-03-31", 100, "q1", "2025-05-01"),
     row("2025-01-01", "2025-06-30", 250, "q2", "2025-08-01"),
     row("2025-01-01", "2025-09-30", 450, "q3", "2025-11-01"),
@@ -41,7 +41,7 @@ def values(quarters):
 
 
 def test_quarters_from_year_to_date(tmp_path):
-    s = store_with(tmp_path, cf("NetCashProvidedByUsedInOperatingActivities", *YEAR))
+    s = store_with(tmp_path, cf("NetCashProvidedByUsedInOperatingActivities", *YTD_OPERATING_CASH_FLOW))
     qs = derive(s, "TEST", "ocf", FLOW)
     assert values(qs) == {
         "Q1": (100, "direct"),
@@ -57,14 +57,14 @@ def test_quarters_from_year_to_date(tmp_path):
 
 def test_leak_no_q4_before_the_10k(tmp_path):
     s = store_with(
-        tmp_path, cf("NetCashProvidedByUsedInOperatingActivities", *YEAR), asof="2026-02-10"
+        tmp_path, cf("NetCashProvidedByUsedInOperatingActivities", *YTD_OPERATING_CASH_FLOW), asof="2026-02-10"
     )
     assert "Q4" not in values(derive(s, "TEST", "ocf", FLOW))
 
 
 def test_restatement_replaces_the_original_once_filed(tmp_path):
     restated = row("2025-01-01", "2025-03-31", 110, "q1-2026", "2026-05-01")
-    payload = cf("NetCashProvidedByUsedInOperatingActivities", *YEAR, restated)
+    payload = cf("NetCashProvidedByUsedInOperatingActivities", *YTD_OPERATING_CASH_FLOW, restated)
     before = store_with(tmp_path, payload, asof="2026-05-01")
     assert values(derive(before, "TEST", "ocf", FLOW))["Q1"][0] == 100
     after = Store(tmp_path / "f.db", AsOf.of("2026-05-02"))
@@ -72,7 +72,7 @@ def test_restatement_replaces_the_original_once_filed(tmp_path):
 
 
 def test_one_concept_per_year(tmp_path):
-    cash_flow = cf("ShareBasedCompensation", *YEAR)
+    cash_flow = cf("ShareBasedCompensation", *YTD_OPERATING_CASH_FLOW)
     income = cf(
         "AllocatedShareBasedCompensationExpense",
         row("2025-04-01", "2025-06-30", 149, "q2", "2025-08-01"),
@@ -107,7 +107,7 @@ def test_a_recast_year_reads_restated_not_fail(tmp_path):
         row("2025-01-01", "2025-06-30", 220, "q2-2026", "2026-08-01"),
         row("2025-04-01", "2025-06-30", 130, "q2-2026", "2026-08-01"),
     ]
-    s = store_with(tmp_path, cf("NetCashProvidedByUsedInOperatingActivities", *YEAR, *recast))
+    s = store_with(tmp_path, cf("NetCashProvidedByUsedInOperatingActivities", *YTD_OPERATING_CASH_FLOW, *recast))
     qs = derive(s, "TEST", "ocf", FLOW)
     assert {c["status"] for c in checks(s, "TEST", "ocf", FLOW, qs)} == {"restated"}
     assert next(q for q in qs if q.period == "Q3").restated

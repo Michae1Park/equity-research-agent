@@ -8,11 +8,11 @@ from era_agent.preprocess.blocks import Block, read_blocks
 from era_agent.preprocess.forms import FormSpec, form_spec
 from era_agent.preprocess.structure import assemble
 
-PART = re.compile(r"^part\s+(iv|i{1,3})\b[\s.:—–-]*", re.I)
-ITEM = re.compile(r"^i\s?t\s?e\s?m\s?s?\s+(\d{1,2}[a-c]?)\b", re.I)
+PART_HEADING = re.compile(r"^part\s+(iv|i{1,3})\b[\s.:—–-]*", re.I)
+ITEM_HEADING = re.compile(r"^i\s?t\s?e\s?m\s?s?\s+(\d{1,2}[a-c]?)\b", re.I)
 UNITS = re.compile(r"in (thousands|millions|billions)", re.I)
 PAGE_NUMBER = re.compile(r"^\s*(\d{1,3}|[A-Z]-\d{1,3})\s*$")
-MAX_HEADING = 150
+MAX_HEADING_CHARS = 150
 HEADING_KINDS = (
     ("auditor_report", re.compile(r"^report of independent registered public accounting", re.I)),
     ("notes_header", re.compile(r"^notes to (the )?(condensed )?consolidated financial", re.I)),
@@ -35,13 +35,13 @@ def label_blocks(blocks: list[Block], spec: FormSpec) -> dict[str, dict]:
     part, last = None, -1
     for i, b in enumerate(blocks):
         text = _text(b).strip()
-        short = len(text) <= MAX_HEADING and not b.link
+        short = len(text) <= MAX_HEADING_CHARS and not b.link
         label: dict = {"id": b.id, "role": "body"}
         one_line = b.kind == "paragraph" or len(b.rows) == 1
-        if short and one_line and (m := PART.match(text)):
+        if short and one_line and (m := PART_HEADING.match(text)):
             part, text = m.group(1).upper(), text[m.end() :]
             label["role"] = "part_heading"
-        if short and one_line and (m := ITEM.match(text)):
+        if short and one_line and (m := ITEM_HEADING.match(text)):
             number = m.group(1).upper()
             key = f"{part}.{number}" if spec.form == "10-Q" and part else number
             if key in spec.items and spec.items.index(key) > last:
@@ -49,7 +49,7 @@ def label_blocks(blocks: list[Block], spec: FormSpec) -> dict[str, dict]:
                 label |= {"role": "item_heading", "item": key}
         elif label["role"] == "part_heading":
             pass
-        elif b.kind == "table" and not (len(b.rows) == 1 and len(text) <= MAX_HEADING):
+        elif b.kind == "table" and not (len(b.rows) == 1 and len(text) <= MAX_HEADING_CHARS):
             caption = blocks[i - 1].text if i else ""
             m = UNITS.search(b.text[:400]) or UNITS.search(caption)
             units = f"USD {m.group(1).lower()}" if m else None

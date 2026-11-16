@@ -83,7 +83,7 @@ def guide(ticker, period, metric, unit, pattern, scale=1.0, target=None, groups=
 
 
 PERIODS = ("2025Q3", "2025Q4", "2026Q1", "2026Q2")
-UBER_BLOCKS = {
+UBER_TABLE_BLOCKS = {
     "2025Q3": ("x1-b0030", "x1-b0035", "x1-b0071"),
     "2025Q4": ("x1-b0034", "x1-b0044", "x1-b0085"),
     "2026Q1": ("x1-b0033", "x1-b0038", "x1-b0074"),
@@ -94,7 +94,7 @@ NEXT = {"2025Q3": "2025Q4", "2025Q4": "2026Q1", "2026Q1": "2026Q2", "2026Q2": "2
 
 def uber() -> list[dict]:
     out = []
-    for period, (hl, seg, inc) in UBER_BLOCKS.items():
+    for period, (hl, seg, inc) in UBER_TABLE_BLOCKS.items():
         def t(*a, period=period, **k):
             return table_label("UBER", period, *a, **k)
 
@@ -120,12 +120,12 @@ def uber() -> list[dict]:
     return out
 
 
-BKNG_CURRENT = {"2025Q3": -1, "2025Q4": 7, "2026Q1": -1, "2026Q2": -1}
+BKNG_CURRENT_UNITS_ROWS = {"2025Q3": -1, "2025Q4": 7, "2026Q1": -1, "2026Q2": -1}
 
 
 def bkng() -> list[dict]:
     out = []
-    for period, i in BKNG_CURRENT.items():
+    for period, i in BKNG_CURRENT_UNITS_ROWS.items():
         def x(*a, period=period, **k):
             return text_label("BKNG", period, *a, **k)
 

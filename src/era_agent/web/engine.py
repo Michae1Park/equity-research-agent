@@ -8,9 +8,9 @@ from pathlib import Path
 from era_agent import telemetry
 from era_agent.corpus import DATA_DIR
 
-RESULT_CHARS = 4000
+TRACE_RESULT_CHARS = 4000
 
-_gpu = threading.Lock()
+_model_server_lock = threading.Lock()
 _factory = None
 _factory_lock = threading.Lock()
 
@@ -34,7 +34,7 @@ def factory(settings: dict):
 
 def _cut(value) -> object:
     text = json.dumps(value, ensure_ascii=False, default=str)
-    return value if len(text) <= RESULT_CHARS else text[:RESULT_CHARS] + " …(cut)"
+    return value if len(text) <= TRACE_RESULT_CHARS else text[:TRACE_RESULT_CHARS] + " …(cut)"
 
 
 class Cancelled(BaseException):
@@ -147,9 +147,9 @@ def chat(settings: dict, mode: str, question: str, as_of: str, emit: Emitter,
 
 def _chat(settings: dict, mode: str, question: str, as_of: str, emit: Emitter,
           history: list[dict], strategy: str) -> dict:
-    if not _gpu.acquire(blocking=False):
+    if not _model_server_lock.acquire(blocking=False):
         emit("status", text="waiting for the running job to finish")
-        while not _gpu.acquire(timeout=1):
+        while not _model_server_lock.acquire(timeout=1):
             emit.check()
     try:
         emit.check()
@@ -215,7 +215,7 @@ def _chat(settings: dict, mode: str, question: str, as_of: str, emit: Emitter,
                     "seconds": inv.seconds, "investigation": data}
         raise ValueError(f"unknown mode {mode!r}")
     finally:
-        _gpu.release()
+        _model_server_lock.release()
 
 
 STAGES = ["S2 events", "S3-S5 model and forecast", "S6-S7 peers and valuation", "S8 revisions",
@@ -253,7 +253,7 @@ class Jobs:
 
         self._emit(job, "status", text="waiting for the running job to finish")
         try:
-            while not _gpu.acquire(timeout=1):
+            while not _model_server_lock.acquire(timeout=1):
                 check()
         except Cancelled:
             self._emit(job, "cancelled", status="cancelled")
@@ -305,7 +305,7 @@ class Jobs:
             finally:
                 pipeline.Clock.step, pipeline.Meter.complete = step, complete
         finally:
-            _gpu.release()
+            _model_server_lock.release()
 
     def cancel(self, job: dict) -> None:
         if job["status"] in ("queued", "running"):
