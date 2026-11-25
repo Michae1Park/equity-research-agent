@@ -6,6 +6,7 @@ from functools import cache
 from pathlib import Path
 
 from era_agent.corpus import COMPANIES, FISCAL_YEARS
+from era_agent.numbers import hundredths
 from era_agent.store import Store
 
 CATEGORIES = (
@@ -52,7 +53,6 @@ FIELD_ORDER = (
     "question",
     "answer_type",
     "expected_answer",
-    "tolerance",
     "required_points",
     "should_abstain",
     "sources",
@@ -180,13 +180,12 @@ def xbrl_checks(q: dict, data_dir: Path) -> list[XbrlCheck]:
             continue
         facts = _annual_usd_facts(data_dir, source["company"])
         period_end = _period_end(data_dir, source["company"], source["fiscal_year"])
-        target = value["value"] * scale
-        tolerance = max(abs(target) * q.get("tolerance", 0.005), scale / 2)
+        target = hundredths(abs(value["value"]))
         concept = next(
             (
                 name
                 for name, end, amount in facts
-                if end == period_end and abs(abs(amount) - abs(target)) <= tolerance
+                if end == period_end and hundredths(abs(amount) / scale) == target
             ),
             None,
         )

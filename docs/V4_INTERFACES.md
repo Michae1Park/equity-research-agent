@@ -803,7 +803,7 @@ Saved as a version (`UBER:v1`, `UBER:v2`, …) with its parent. `research_report
 | File | Row |
 |---|---|
 | `extraction-gold.jsonl` | `{id, ticker, period, metric, segment, value, unit, source, block, quote, verified_by}` |
-| `ask-gold.jsonl` | `{id, split, category, kind, question, as_of, period, form, answer_type, expected_answer: [{value, unit, company}], tolerance, required_points, should_abstain, verified_by}` |
+| `ask-gold.jsonl` | `{id, split, category, kind, question, as_of, period, form, answer_type, expected_answer: [{value, unit, company}], required_points, should_abstain, verified_by}` |
 | `research-gold.jsonl` | `{id, split, category, company, question, as_of, expected_refs: [regex], requires_assumptions, expected_tools, verified_by}` |
 
 **Result folders:** `evaluation/results/backtest-<label>/` (`report.md`, `forecasts.csv`, `summary.json`, `llm_baseline.json`); Ask and Research runs under `output/generation/<label>/` (`results.json`, `scores.json`).

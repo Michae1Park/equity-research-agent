@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1180" height="1110" viewBox="0 0 1180 1110" role="img" aria-labelledby="svgtitle svgdesc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
   <title id="svgtitle">Evaluation flow</title>
-  <desc id="svgdesc">A generated answer arrives with the claim statuses the pipeline already gave it, then grade() picks the check by answer type: decline questions are correct if the model declined, number questions if every expected value is stated within tolerance, and text questions are first unjudged and then scored by an LLM judge against required points. summarize() aggregates per context, results are stored, and report.py recomputes Recall@k and MRR to write the per-question report.</desc>
+  <desc id="svgdesc">A generated answer arrives with the claim statuses the pipeline already gave it, then grade() picks the check by answer type: decline questions are correct if the model declined, number questions if every expected value is stated exactly to the hundredth, and text questions are first unjudged and then scored by an LLM judge against required points. summarize() aggregates per context, results are stored, and report.py recomputes Recall@k and MRR to write the per-question report.</desc>
   <style>
     @media (prefers-color-scheme: dark) {
       .bg    { fill: #0f1419; stroke: #2b3540; }
@@ -89,7 +89,7 @@
   <text class="name" x="590.0" y="563" text-anchor="middle" font-size="17" font-weight="600" fill="#132030">Number question</text>
   <text class="sub" x="590.0" y="589" text-anchor="middle" font-size="14" fill="#4a5a68">code only: matches() in answer_metrics</text>
   <text class="sub" x="590.0" y="609" text-anchor="middle" font-size="14" fill="#4a5a68">every expected value is in the answer</text>
-  <text class="sub" x="590.0" y="629" text-anchor="middle" font-size="14" fill="#4a5a68">text or table, within the tolerance,</text>
+  <text class="sub" x="590.0" y="629" text-anchor="middle" font-size="14" fill="#4a5a68">text or table, exact to the hundredth,</text>
   <text class="sub" x="590.0" y="649" text-anchor="middle" font-size="14" fill="#4a5a68">units normalized (billions → millions)</text>
   <rect class="work" x="800" y="530" width="340" height="136" rx="7" fill="#e7f3ea" stroke="#4f8f61" stroke-width="1.5"/>
   <text class="name" x="970.0" y="573" text-anchor="middle" font-size="17" font-weight="600" fill="#132030">Text question</text>

@@ -31,8 +31,8 @@ def build_report(
         + (f"; unjudged: {', '.join(scores['unjudged'])}" if scores["unjudged"] else "")
         + ".",
         "## Number questions",
-        "Correct when every expected value is stated in the answer within the question's "
-        "tolerance. Recall@k and MRR score the retrieval step on the same question.",
+        "Correct when every expected value is stated in the answer, exact to the hundredth "
+        "in the gold unit. Recall@k and MRR score the retrieval step on the same question.",
         _number_table(groups["number"], by_id, store, at),
         "## Text questions",
         "Correct when the LLM judge finds every required point in the answer.",

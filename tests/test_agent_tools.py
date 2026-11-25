@@ -221,9 +221,12 @@ def test_bare_dollar_amounts_match_gold_values_in_millions():
     from era_agent.evaluation.answer_metrics import matches
 
     expected = {"value": 97690, "unit": "USD millions"}
-    assert matches(expected, "97,690,000,000", None, 0.005)
-    assert matches(expected, "97690", None, 0.005)
-    assert not matches(expected, "97,690,000", None, 0.005)
+    assert matches(expected, "97,690,000,000", None)
+    assert matches(expected, "97690", None)
+    assert not matches(expected, "97,690,000", None)
+    assert not matches(expected, "97,700", "USD millions")
+    assert matches({"value": 12.34, "unit": "percent"}, "12.34", "percent")
+    assert not matches({"value": 12.34, "unit": "percent"}, "12.3", "percent")
 
 
 def test_a_calculation_with_op_expression_is_rerun_as_an_expression(tools):

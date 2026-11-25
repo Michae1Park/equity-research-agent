@@ -232,10 +232,7 @@ def _expected(q: dict, checks: list) -> str:
                 f"<tr><th>{escape(who)}</th><td class=num>{v['value']:,}</td>"
                 f"<td>{escape(v['unit'])}</td>{xbrl}</tr>"
             )
-        tol = q.get("tolerance")
         out.append(f"<table class=expected>{''.join(rows)}</table>")
-        if tol is not None:
-            out.append(f"<span class=notes>tolerance {tol:.2%}</span>")
     if q.get("required_points"):
         items = "".join(f"<li>{escape(p)}</li>" for p in q["required_points"])
         out.append(f"<div class=label>Answer must say</div><ul>{items}</ul>")

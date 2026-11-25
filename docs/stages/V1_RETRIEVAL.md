@@ -67,7 +67,7 @@ One JSON object per line ([`evaluation/gold.py`](../../src/era_agent/evaluation/
 |---|---|
 | `id`, `split`, `kind` | Unique id; `dev` / `test`; the question kind (`figure`, `risk`, `drivers`, `compare_company`, `compare_year`, `open`, `decline`) |
 | `question` | As a user would ask it |
-| `answer_type`, `expected_answer`, `tolerance` | `number` (`{value, unit}`), `number_set` (a list, each with `company`, `fiscal_year`), `text` or `abstain`; relative tolerance for numbers (0.5%) |
+| `answer_type`, `expected_answer` | `number` (`{value, unit}`), `number_set` (a list, each with `company`, `fiscal_year`), `text` or `abstain`; numbers match exactly at two decimals in the gold unit |
 | `required_points` | What a text answer must state (V2's judge) |
 | `should_abstain` | The filings can't answer: the system should decline |
 | `sources` | Each: `company`, `fiscal_year`, `accession_no`, `item`, `section` and a verbatim `evidence` line; a chunk containing it is gold |

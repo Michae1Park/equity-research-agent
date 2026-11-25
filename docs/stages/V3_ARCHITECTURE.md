@@ -62,7 +62,7 @@ Answers, the agent and the judge go through `Model.complete(messages)` (`src/era
 Evaluation never runs the pipeline, including the claim check. It takes the pipeline's output, the generated answer with its claim statuses and the chunks the model was shown, and grades it against the gold set. The only LLM in it is the judge, and only for text answers.
 
 <p align="center">
-  <img src="../img/evaluation.svg" alt="Evaluation flow: gold JSONL gives gold chunks; the generated answer arrives with the claim statuses the pipeline already gave it; grade() picks the check by answer type: decline questions are correct if the model declined, number questions if every expected value is stated within tolerance, text questions are unjudged until the LLM judge scores them against required points; summarize() aggregates per context, results are stored and report.py recomputes Recall@k and MRR to write the report" width="100%">
+  <img src="../img/evaluation.svg" alt="Evaluation flow: gold JSONL gives gold chunks; the generated answer arrives with the claim statuses the pipeline already gave it; grade() picks the check by answer type: decline questions are correct if the model declined, number questions if every expected value is stated exactly to the hundredth, text questions are unjudged until the LLM judge scores them against required points; summarize() aggregates per context, results are stored and report.py recomputes Recall@k and MRR to write the report" width="100%">
 </p>
 
 | Step | Code | LLM? |

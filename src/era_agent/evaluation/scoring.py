@@ -29,9 +29,8 @@ def stated_numbers(q: dict, answer: dict) -> dict | None:
     table = answer["table"] or {}
     cells = [str(cell) for row in table.get("rows") or [] for cell in row]
     found = numbers_in(" ".join([answer["answer"], *cells]))
-    tolerance = q.get("tolerance", 0.005)
     matched = [
-        any(matches(value, n.value, text_unit(n), tolerance) for n in found) for value in expected
+        any(matches(value, n.value, text_unit(n)) for n in found) for value in expected
     ]
     return {"expected": len(expected), "matched": sum(matched), "all": all(matched)}
 
