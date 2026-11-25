@@ -11,7 +11,11 @@ def matches(expected: dict, claim_value, claim_unit) -> bool:
         return False
     target_scale = unit_scale(expected["unit"]) or 1.0
     claim_scale = unit_scale(claim_unit)
-    candidates = [value * claim_scale / target_scale] if claim_scale is not None else [value, value / target_scale]
+    candidates = (
+        [value * claim_scale / target_scale]
+        if claim_scale is not None
+        else [value, value / target_scale]
+    )
     target = hundredths(abs(float(expected["value"])))
     return any(hundredths(abs(c)) == target for c in candidates)
 

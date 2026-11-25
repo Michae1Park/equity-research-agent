@@ -523,7 +523,8 @@ class Toolbox:
             out.append(
                 {"id": guide_id(ticker, r["metric"], r["segment"], r["target_period"]),
                  "period": r["target_period"], "metric": r["metric"], "segment": r["segment"],
-                 "low": _round(r["low"]), "high": _round(r["high"]), "unit": r["unit"], "basis": r["basis"],
+                 "low": _round(r["low"]), "high": _round(r["high"]),
+                 "unit": r["unit"], "basis": r["basis"],
                  "issued_in": r["issued_in"], "chunk_id": r["chunk_id"], "quote": r["quote"]}
                 | ({"actual": _round(actual.values[0]["value"]), "actual_id": actual.ref.id}
                    if actual else {})
@@ -565,7 +566,9 @@ class Toolbox:
             chosen = [
                 next((p for p in reversed(points) if p[0] <= d), None) for d in dates
             ] if dates else [points[-1]]
-        rows = [{"id": f"{prefix}:{d}", "date": d, "value": _round(v)} for d, v in filter(None, chosen)]
+        rows = [
+            {"id": f"{prefix}:{d}", "date": d, "value": _round(v)} for d, v in filter(None, chosen)
+        ]
         return {"series": name, "unit": unit} | _cap(rows)
 
 
@@ -714,7 +717,8 @@ class Toolbox:
                              "base_id": self.book.ref(ticker, "base", line, y)})
         return {
             "company": ticker, "version": version,
-            "changes": {k: _round(v, "fraction") for k, v in changes.items()}, "clipped_to_bounds": clipped,
+            "changes": {k: _round(v, "fraction") for k, v in changes.items()},
+            "clipped_to_bounds": clipped,
             "overrode_anchor": sorted(k for k in changes if k in {a.solve for a in f.anchors}),
             "rows": rows,
             "price_target": {"base": _round(val_base["price_target"]),
