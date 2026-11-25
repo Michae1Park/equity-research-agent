@@ -3,6 +3,8 @@ import math
 import operator
 from dataclasses import dataclass
 
+from era_agent.numbers import hundredths
+
 OPERATIONS = {
     "pct_change": (("old", "new"), "(new - old) / old * 100"),
     "cagr": (("start", "end", "years"), "((end / start) ** (1 / years) - 1) * 100"),
@@ -61,7 +63,7 @@ def calculate(
     result = _eval(tree.body, inputs)
     if isinstance(result, complex) or not math.isfinite(result):
         raise CalculatorError(f"result is not a real number: {result}")
-    return Calculation(round(result, 6), formula, inputs)
+    return Calculation(hundredths(result, "fraction" if op == "ratio" else None), formula, inputs)
 
 
 def _number(name: str, value) -> float:

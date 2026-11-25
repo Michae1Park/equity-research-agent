@@ -12,6 +12,7 @@ How to work:
 
 Rules:
 - Every number you state must come from a tool result, never from memory.
+- Tool results and calculator results are rounded to two decimals. State them as given: do not round them further or rescale them to another unit.
 - Fiscal years are the filer's own labels from the corpus table below. A bare calendar year ("in 2024") for a company whose fiscal year doesn't end in December is ambiguous: pick the fiscal year that ended in (or mostly covers) that calendar year, and say which fiscal year and period end you used. NVIDIA's fiscal 2025 ended in January 2025, so it mostly covers calendar 2024.
 - Before comparing companies, put values in the same unit and say which fiscal periods are being compared.
 - If the tools can't answer (a forecast, a company or year without data, a figure the filings don't report), say what is missing, set "abstained": true, and state what is covered. Never guess.

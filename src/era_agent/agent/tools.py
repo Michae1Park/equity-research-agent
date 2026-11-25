@@ -6,6 +6,7 @@ from era_agent.asof import AsOf
 from era_agent.corpus import resolve_company
 from era_agent.generation.calculator import CalculatorError, calculate
 from era_agent.models import ToolSpec
+from era_agent.numbers import hundredths
 from era_agent.retrieval.search import SubQuestionRetriever
 from era_agent.store import ChunkRecord, Store, period_parts
 from era_agent.telemetry import logged_tool
@@ -474,7 +475,7 @@ class Toolbox:
         if metric not in specs:
             return {"error": f"unknown metric {metric!r}", "metrics": sorted(specs)}
         rows = [
-            {"id": q.id, "period": _key(q), "value": q.value, "unit": q.unit,
+            {"id": q.id, "period": _key(q), "value": _round(q.value), "unit": q.unit,
              "derivation": q.derivation} | ({"restated": True} if q.restated else {})
             for q in derive(self.store, ticker, metric, specs[metric])
         ]
@@ -497,7 +498,7 @@ class Toolbox:
         latest = {(r["metric"], r["segment"], r["period"]): r for r in rows}
         out = [
             {"id": kpi_id(ticker, r["metric"], r["segment"], r["period"]), "period": r["period"],
-             "metric": r["metric"], "segment": r["segment"], "value": r["value"],
+             "metric": r["metric"], "segment": r["segment"], "value": _round(r["value"]),
              "unit": r["unit"], "chunk_id": r["chunk_id"], "quote": r["quote"]}
             for r in latest.values()
             if segment is None or r["segment"] == segment
@@ -522,9 +523,9 @@ class Toolbox:
             out.append(
                 {"id": guide_id(ticker, r["metric"], r["segment"], r["target_period"]),
                  "period": r["target_period"], "metric": r["metric"], "segment": r["segment"],
-                 "low": r["low"], "high": r["high"], "unit": r["unit"], "basis": r["basis"],
+                 "low": _round(r["low"]), "high": _round(r["high"]), "unit": r["unit"], "basis": r["basis"],
                  "issued_in": r["issued_in"], "chunk_id": r["chunk_id"], "quote": r["quote"]}
-                | ({"actual": actual.values[0]["value"], "actual_id": actual.ref.id}
+                | ({"actual": _round(actual.values[0]["value"]), "actual_id": actual.ref.id}
                    if actual else {})
             )
         return {"company": ticker} | _pick(out, periods)
@@ -564,7 +565,7 @@ class Toolbox:
             chosen = [
                 next((p for p in reversed(points) if p[0] <= d), None) for d in dates
             ] if dates else [points[-1]]
-        rows = [{"id": f"{prefix}:{d}", "date": d, "value": v} for d, v in filter(None, chosen)]
+        rows = [{"id": f"{prefix}:{d}", "date": d, "value": _round(v)} for d, v in filter(None, chosen)]
         return {"series": name, "unit": unit} | _cap(rows)
 
 
@@ -591,7 +592,7 @@ class Toolbox:
                           and (not end or p[0][:7] <= end)]
             else:
                 points = points[-12:]
-            rows += [{"id": f"{name}:{d}", "series": label, "month": d[:7], "value": v}
+            rows += [{"id": f"{name}:{d}", "series": label, "month": d[:7], "value": _round(v)}
                      for d, v in points]
         return {"series": series, "coverage": COVERAGE[series], "unit": "trips" if series ==
                 "tlc" else "passengers"} | _cap(rows)
@@ -665,7 +666,8 @@ class Toolbox:
                       "values": {c: _shown(m.value(n, c), m.line(n).unit) for c in columns}}
                      for n in names],
             "assumptions": [
-                {"driver": k, "value": _round(v), "default": _round(f.defaults.get(k)),
+                {"driver": k, "value": _round(v, "fraction"),
+                 "default": _round(f.defaults.get(k), "fraction"),
                  "source": f"guidance {anchored[k].guide_id}" if k in anchored else "default"}
                 for k, v in sorted(m.assumptions.items())
                 if not k.endswith((".lo", ".hi"))],
@@ -712,7 +714,7 @@ class Toolbox:
                              "base_id": self.book.ref(ticker, "base", line, y)})
         return {
             "company": ticker, "version": version,
-            "changes": {k: _round(v) for k, v in changes.items()}, "clipped_to_bounds": clipped,
+            "changes": {k: _round(v, "fraction") for k, v in changes.items()}, "clipped_to_bounds": clipped,
             "overrode_anchor": sorted(k for k in changes if k in {a.solve for a in f.anchors}),
             "rows": rows,
             "price_target": {"base": _round(val_base["price_target"]),
@@ -762,7 +764,7 @@ class Toolbox:
             rows.append({"company": t, "value": _round(value) if not isinstance(value, str)
                          else value, "unit": unit, "id": ref,
                          "assumptions": [
-                             {"driver": k, "value": _round(v),
+                             {"driver": k, "value": _round(v, "fraction"),
                               "source": f"guidance {anchored[k]}" if k in anchored else "default"}
                              for k, v in sorted(f.model.assumptions.items())
                              if k.endswith((".g0", ".shift0"))][:4]})
@@ -804,7 +806,7 @@ def variance(book, ticker: str, period: str) -> dict:
             "bridge_ids": {k: f"model:{ticker}:{book.as_of}:var-{period}:{k}"
                            for k in (bridge or {})},
             "estimate_assumptions": [
-                {"driver": k, "value": _round(v)} for k, v in sorted(
+                {"driver": k, "value": _round(v, "fraction")} for k, v in sorted(
                     prior_forecast.model.assumptions.items())
                 if k.endswith((".g0", ".shift0")) or k == "fade"]}
 
@@ -848,8 +850,8 @@ def _shown(value, unit: str):
     return _round(value * 100 if unit == "fraction" else value)
 
 
-def _round(value):
-    return None if value is None else round(float(value), 4)
+def _round(value, unit: str | None = None):
+    return hundredths(value, unit)
 
 
 def _key(q) -> str:

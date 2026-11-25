@@ -11,7 +11,7 @@ def chunk(text: str, units: str | None = None) -> ChunkRecord:
 
 def test_named_operations_show_their_formula():
     result = calculate("pct_change", inputs={"old": 29915, "new": 31370})
-    assert result.result == pytest.approx(4.8638, abs=1e-4)
+    assert result.result == 4.86
     assert result.formula == "(new - old) / old * 100"
     assert calculate("cagr", inputs={"start": 100, "end": 121, "years": 2}).result == pytest.approx(
         10.0
@@ -21,7 +21,7 @@ def test_named_operations_show_their_formula():
 
 def test_expressions_accept_formatted_numbers_and_parentheses_as_negatives():
     result = calculate(expression="a / b * 100", inputs={"a": "85,200", "b": "$383,285"})
-    assert result.result == pytest.approx(22.229, abs=1e-3)
+    assert result.result == 22.23
     assert calculate(expression="a + b", inputs={"a": "(3,105)", "b": 5}).result == -3100
 
 
